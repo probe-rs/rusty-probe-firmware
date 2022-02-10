@@ -1,0 +1,39 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"command": "cargo",
+			"args": [
+				"brb",
+				"minimal"
+			],
+			"options": {
+				"env": {
+					"DEFMT_LOG": "info",
+				}
+			},
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build",
+			"label": "build binary minimal"
+		},
+		{
+			"command": "cargo",
+			"args": [
+				"rrb",
+				"minimal"
+			],
+			"options": {
+				"env": {
+					"DEFMT_LOG": "info",
+				}
+			},
+			"problemMatcher": [
+				"$rustc"
+			],
+			"group": "build",
+			"label": "run binary minimal"
+		}
+	]
+}
