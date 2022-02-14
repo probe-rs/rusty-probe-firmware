@@ -4,7 +4,9 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use defmt_rtt as _;
 use panic_probe as _;
 
+pub mod device_signature;
 pub mod setup;
+pub mod usb;
 
 defmt::timestamp! {"{=u64}", {
     static COUNT: AtomicUsize = AtomicUsize::new(0);
