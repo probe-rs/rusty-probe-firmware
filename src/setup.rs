@@ -2,11 +2,9 @@ use rp2040_monotonic::Rp2040Monotonic;
 use rp_pico::{
     hal::{
         clocks::init_clocks_and_plls,
-        gpio::{
-            pin::bank0::{Gpio23, Gpio24, Gpio25},
-            Pin, Pins, PullDownInput, PushPullOutput,
-        },
+        gpio::{pin::bank0::*, Pin, Pins, PullDownInput, PushPullOutput},
         pac,
+        usb::UsbBus,
         watchdog::Watchdog,
         Sio,
     },
@@ -15,14 +13,20 @@ use rp_pico::{
 
 use embedded_hal::digital::v2::InputPin;
 use embedded_hal::digital::v2::OutputPin;
+use usb_device::class_prelude::UsbBusAllocator;
+
+use crate::usb::ProbeUsb;
 
 pub type LedPin = Pin<Gpio25, PushPullOutput>;
 
 #[inline(always)]
-pub fn setup(pac: pac::Peripherals) -> (Rp2040Monotonic, LedPin, Swd) {
+pub fn setup(
+    pac: pac::Peripherals,
+    usb_bus: &'static mut Option<UsbBusAllocator<UsbBus>>,
+) -> (Rp2040Monotonic, LedPin, ProbeUsb, Swd) {
     let mut resets = pac.RESETS;
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
-    let _clocks = defmt::unwrap!(init_clocks_and_plls(
+    let clocks = defmt::unwrap!(init_clocks_and_plls(
         XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
@@ -33,52 +37,68 @@ pub fn setup(pac: pac::Peripherals) -> (Rp2040Monotonic, LedPin, Swd) {
     )
     .ok());
 
+    let usb_bus: &'static _ = usb_bus.insert(UsbBusAllocator::new(UsbBus::new(
+        pac.USBCTRL_REGS,
+        pac.USBCTRL_DPRAM,
+        clocks.usb_clock,
+        true,
+        &mut resets,
+    )));
+
+    let probe_usb = ProbeUsb::new(&usb_bus);
+
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
 
     let led = pins.gpio25.into_push_pull_output();
-    let mut io = pins.gpio23.into_push_pull_output();
+    let mut io = pins.gpio14.into_push_pull_output();
     io.set_low().ok();
-    let mut ck = pins.gpio24.into_push_pull_output();
+    let mut ck = pins.gpio15.into_push_pull_output();
     ck.set_low().ok();
 
     let mono = Rp2040Monotonic::new(pac.TIMER);
 
-    (mono, led, Swd { io, ck })
+    (mono, led, probe_usb, Swd { io, ck })
 }
 
 pub struct Swd {
-    io: Pin<Gpio23, PushPullOutput>,
-    ck: Pin<Gpio24, PushPullOutput>,
+    io: Pin<Gpio14, PushPullOutput>,
+    ck: Pin<Gpio15, PushPullOutput>,
 }
 
-const DELAY: u32 = 100_000;
+const DELAY: u32 = 0;
+
+use replace_with::replace_with_or_abort_unchecked;
 
 impl Swd {
-    pub fn write(self, req: u8, data: u32) -> Self {
-        let Swd { mut io, mut ck } = self;
+    pub fn write(&mut self, req: u8, data: u32) {
+        unsafe {
+            replace_with_or_abort_unchecked(self, |s| {
+                let Swd { mut io, mut ck } = s;
 
-        Self::send_u8(&mut io, &mut ck, req);
+                Self::send_u8(&mut io, &mut ck, req);
 
-        let (ack, mut io) = Self::read_ack(io, &mut ck);
+                let (ack, mut io) = Self::read_ack(io, &mut ck);
 
-        defmt::info!("ack: {}", ack);
+                defmt::info!("ack: {}", ack);
 
-        for b in data.to_le_bytes() {
-            Self::send_u8(&mut io, &mut ck, b);
+                for b in data.to_le_bytes() {
+                    Self::send_u8(&mut io, &mut ck, b);
+                }
+
+                let parity = data.count_ones() as u8;
+
+                Self::send_u8(&mut io, &mut ck, parity & 1);
+
+                Swd { io, ck }
+            });
         }
-
-        let parity = data.count_ones() as u8;
-
-        Self::send_u8(&mut io, &mut ck, parity & 1);
-
-        Swd { io, ck }
     }
 
     fn read_ack(
-        io: Pin<Gpio23, PushPullOutput>,
-        ck: &mut Pin<Gpio24, PushPullOutput>,
-    ) -> (u8, Pin<Gpio23, PushPullOutput>) {
+        io: Pin<Gpio14, PushPullOutput>,
+        ck: &mut Pin<Gpio15, PushPullOutput>,
+    ) -> (u8, Pin<Gpio14, PushPullOutput>) {
         let io = io.into_pull_down_input();
 
         let mut val = 0;
@@ -92,8 +112,8 @@ impl Swd {
     }
 
     fn send_u8(
-        io: &mut Pin<Gpio23, PushPullOutput>,
-        ck: &mut Pin<Gpio24, PushPullOutput>,
+        io: &mut Pin<Gpio14, PushPullOutput>,
+        ck: &mut Pin<Gpio15, PushPullOutput>,
         mut val: u8,
     ) {
         for _ in 0..8 {
@@ -102,7 +122,7 @@ impl Swd {
         }
     }
 
-    fn read_bit(io: &Pin<Gpio23, PullDownInput>, ck: &mut Pin<Gpio24, PushPullOutput>) -> u8 {
+    fn read_bit(io: &Pin<Gpio14, PullDownInput>, ck: &mut Pin<Gpio15, PushPullOutput>) -> u8 {
         cortex_m::asm::delay(DELAY);
         ck.set_high().ok();
         cortex_m::asm::delay(DELAY);
@@ -113,8 +133,8 @@ impl Swd {
     }
 
     fn send_bit(
-        io: &mut Pin<Gpio23, PushPullOutput>,
-        ck: &mut Pin<Gpio24, PushPullOutput>,
+        io: &mut Pin<Gpio14, PushPullOutput>,
+        ck: &mut Pin<Gpio15, PushPullOutput>,
         level: u8,
     ) {
         if level == 0 {

@@ -1,6 +1,4 @@
-use debug_traits::usb::{
-    dap_v1::CmsisDapV1, dap_v2::CmsisDapV2, Request, DAP1_PACKET_SIZE, DAP2_PACKET_SIZE,
-};
+use dap_rs::usb::{dap_v1::CmsisDapV1, dap_v2::CmsisDapV2, Request};
 use defmt::*;
 use rp_pico::hal::usb::UsbBus;
 use usb_device::{class_prelude::*, prelude::*};
@@ -20,8 +18,8 @@ pub struct ProbeUsb {
 
 impl ProbeUsb {
     pub fn new(usb_bus: &'static UsbBusAllocator<UsbBus>) -> Self {
-        let dap_v1 = CmsisDapV1::new(usb_bus);
-        let dap_v2 = CmsisDapV2::new(usb_bus);
+        let dap_v1 = CmsisDapV1::new(64, usb_bus);
+        let dap_v2 = CmsisDapV2::new(64, usb_bus);
         let serial = SerialPort::new(&usb_bus);
 
         let id = crate::device_signature::device_id_hex();
@@ -70,7 +68,7 @@ impl ProbeUsb {
             }
 
             // Discard data from the serial interface
-            let mut buf = [0; DAP2_PACKET_SIZE as usize];
+            let mut buf = [0; 64 as usize];
             let _ = self.serial.read(&mut buf);
         }
         None

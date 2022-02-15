@@ -19,10 +19,12 @@ usb-device= "0.2.8"
 usbd-serial = "0.1.1"
 usbd-hid = "0.5.1"
 
-debug-traits = { path = "../debug-traits", features = ["defmt"] }
+dap-rs = { path = "../debug-traits", features = ["defmt"] }
 
 # We're using a Pico by default on this template
 rp-pico = "0.2.0"
+replace_with = { version = "0.1.7", default-features = false, features = ["panic_abort"] }
+bitflags = "1.3.2"
 
 # but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
 # sparkfun-pro-micro-rp2040 = "0.1.0"

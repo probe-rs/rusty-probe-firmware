@@ -4,6 +4,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use defmt_rtt as _;
 use panic_probe as _;
 
+pub mod dap;
 pub mod device_signature;
 pub mod setup;
 pub mod usb;

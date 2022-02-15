@@ -5,7 +5,7 @@
 			"command": "cargo",
 			"args": [
 				"brb",
-				"minimal"
+				"pico-probe"
 			],
 			"options": {
 				"env": {
@@ -16,13 +16,13 @@
 				"$rustc"
 			],
 			"group": "build",
-			"label": "build binary minimal"
+			"label": "build binary pico-probe"
 		},
 		{
 			"command": "cargo",
 			"args": [
 				"rrb",
-				"minimal"
+				"pico-probe"
 			],
 			"options": {
 				"env": {
@@ -33,7 +33,7 @@
 				"$rustc"
 			],
 			"group": "build",
-			"label": "run binary minimal"
+			"label": "run binary pico-probe"
 		}
 	]
 }
