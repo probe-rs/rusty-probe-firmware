@@ -15,6 +15,31 @@ pub struct Context {
     nreset: DynPin,
 }
 
+impl defmt::Format for Context {
+    fn format(&self, f: defmt::Formatter) {
+        // format the bitfields of the register as struct fields
+        defmt::write!(
+           f,
+           "Context {{ max_frequency: {}, cpu_frequency: {}, cycles_per_us: {}, half_period_ticks: {} }}",
+            self.max_frequency,
+            self.cpu_frequency,
+            self.cycles_per_us,
+            self.half_period_ticks,
+        )
+    }
+}
+
+impl core::fmt::Debug for Context {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Context")
+            .field("max_frequency", &self.max_frequency)
+            .field("cpu_frequency", &self.cpu_frequency)
+            .field("cycles_per_us", &self.cycles_per_us)
+            .field("half_period_ticks", &self.half_period_ticks)
+            .finish()
+    }
+}
+
 impl dap::DapContext for Context {
     fn high_impedance_mode(&mut self) {
         self.swdio.into_floating_disabled();
@@ -24,7 +49,7 @@ impl dap::DapContext for Context {
 }
 
 impl Context {
-    pub fn from_pins(swdio: DynPin, swclk: DynPin, nreset: DynPin, cpu_frequency: u32) -> Self {
+    fn from_pins(swdio: DynPin, swclk: DynPin, nreset: DynPin, cpu_frequency: u32) -> Self {
         let max_frequency = 100_000;
         let half_period_ticks = cpu_frequency / max_frequency / 2;
         Context {
@@ -127,6 +152,7 @@ impl swj::Swj for Context {
     }
 }
 
+#[derive(Debug, defmt::Format)]
 pub struct Leds {}
 
 impl dap::DapLeds for Leds {
@@ -155,6 +181,7 @@ impl jtag::Jtag<Context> for Jtag {
     }
 }
 
+#[derive(Debug, defmt::Format)]
 pub struct Swd(Context);
 
 impl swd::Swd<Context> for Swd {
@@ -346,6 +373,7 @@ impl Swd {
     }
 }
 
+#[derive(Debug, defmt::Format)]
 pub struct Swo {}
 
 impl swo::Swo for Swo {
@@ -394,6 +422,7 @@ impl swo::Swo for Swo {
     }
 }
 
+#[derive(Debug, defmt::Format)]
 pub struct Wait {
     cycles_per_us: u32,
 }
@@ -412,8 +441,20 @@ impl DelayUs<u32> for Wait {
     }
 }
 
+#[inline(always)]
 pub fn create_dap(
     version_string: &'static str,
+    swdio: DynPin,
+    swclk: DynPin,
+    nreset: DynPin,
+    cpu_frequency: u32,
 ) -> dap::Dap<'static, Context, Leds, Wait, Jtag, Swd, Swo> {
-    todo!()
+    let context = Context::from_pins(swdio, swclk, nreset, cpu_frequency);
+    let leds = Leds {};
+    let wait = Wait::new(cpu_frequency);
+    let swo = None;
+
+    defmt::info!("Making dap interface with context: {}", context);
+
+    dap::Dap::from_parts(context, leds, wait, swo, version_string)
 }

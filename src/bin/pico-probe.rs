@@ -1,15 +1,15 @@
 #![no_std]
 #![no_main]
 
-use rp_rtic as _;
+use pico_probe as _;
 
 #[rtic::app(device = rp_pico::hal::pac, dispatchers = [XIP_IRQ])]
 mod app {
     use defmt::*;
     use embedded_hal::digital::v2::ToggleableOutputPin;
+    use pico_probe::setup::*;
     use rp2040_monotonic::*;
     use rp_pico::hal::usb::UsbBus;
-    use rp_rtic::setup::*;
     use usb_device::class_prelude::*;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
@@ -20,24 +20,23 @@ mod app {
 
     #[local]
     struct Local {
-        probe_usb: rp_rtic::usb::ProbeUsb,
+        probe_usb: pico_probe::usb::ProbeUsb,
+        dap_handler: DapHandler,
         led: LedPin,
-        swd: Swd,
     }
 
     #[init(local = [usb_bus: Option<UsbBusAllocator<UsbBus>> = None])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
-        let (mono, led, probe_usb, swd) = setup(cx.device, cx.local.usb_bus);
+        let (mono, led, probe_usb, dap_handler) = setup(cx.device, cx.local.usb_bus);
 
         led_blinker::spawn().ok();
-        swd_sender::spawn().ok();
 
         (
             Shared {},
             Local {
                 probe_usb,
+                dap_handler,
                 led,
-                swd,
             },
             init::Monotonics(mono),
         )
@@ -49,19 +48,37 @@ mod app {
         led_blinker::spawn_after(500.millis()).ok();
     }
 
-    #[task(local = [swd])]
-    fn swd_sender(cx: swd_sender::Context) {
-        info!("Sending SWD");
-        cx.local.swd.write(0x0b, 0x12345678);
-        swd_sender::spawn_after(100.millis()).ok();
-    }
-
-    #[task(binds = USBCTRL_IRQ, shared = [], local = [probe_usb])]
+    #[task(binds = USBCTRL_IRQ, local = [probe_usb, dap_handler, resp_buf: [u8; 64] = [0; 64]])]
     fn on_usb(ctx: on_usb::Context) {
         let probe_usb = ctx.local.probe_usb;
+        let dap = ctx.local.dap_handler;
+        let resp_buf = ctx.local.resp_buf;
 
         if let Some(request) = probe_usb.interrupt() {
-            info!("Got USB request: {}", request);
+            use dap_rs::{dap::DapVersion, usb::Request};
+
+            match request {
+                Request::DAP1Command((report, n)) => {
+                    info!("Got DAP v1 command");
+                    let len = dap.process_command(&report[..n], resp_buf, DapVersion::V1);
+
+                    if len > 0 {
+                        probe_usb.dap1_reply(&resp_buf[..len]);
+                    }
+                }
+                Request::DAP2Command((report, n)) => {
+                    info!("Got DAP v2 command");
+                    let len = dap.process_command(&report[..n], resp_buf, DapVersion::V2);
+
+                    if len > 0 {
+                        probe_usb.dap2_reply(&resp_buf[..len]);
+                    }
+                }
+                Request::Suspend => {
+                    info!("Got USB suspend command");
+                    dap.suspend();
+                }
+            }
         }
     }
 }

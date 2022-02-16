@@ -2,7 +2,6 @@ use dap_rs::usb::{dap_v1::CmsisDapV1, dap_v2::CmsisDapV2, Request};
 use defmt::*;
 use rp_pico::hal::usb::UsbBus;
 use usb_device::{class_prelude::*, prelude::*};
-use usbd_hid::descriptor::generator_prelude::*;
 use usbd_serial::SerialPort;
 
 /// Implements the CMSIS DAP descriptors.
@@ -17,6 +16,7 @@ pub struct ProbeUsb {
 }
 
 impl ProbeUsb {
+    #[inline(always)]
     pub fn new(usb_bus: &'static UsbBusAllocator<UsbBus>) -> Self {
         let dap_v1 = CmsisDapV1::new(64, usb_bus);
         let dap_v2 = CmsisDapV2::new(64, usb_bus);
@@ -42,6 +42,7 @@ impl ProbeUsb {
             serial,
         }
     }
+
     pub fn interrupt(&mut self) -> Option<Request> {
         if self.device.poll(&mut [
             // &mut usb.winusb,
@@ -72,5 +73,19 @@ impl ProbeUsb {
             let _ = self.serial.read(&mut buf);
         }
         None
+    }
+
+    /// Transmit a DAP report back over the DAPv1 HID interface
+    pub fn dap1_reply(&mut self, data: &[u8]) {
+        self.dap_v1
+            .write_packet(data)
+            .expect("DAPv1 EP write failed");
+    }
+
+    /// Transmit a DAP report back over the DAPv2 bulk interface
+    pub fn dap2_reply(&mut self, data: &[u8]) {
+        self.dap_v2
+            .write_packet(data)
+            .expect("DAPv2 EP write failed");
     }
 }
