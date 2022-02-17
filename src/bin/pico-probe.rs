@@ -5,6 +5,7 @@ use pico_probe as _;
 
 #[rtic::app(device = rp_pico::hal::pac, dispatchers = [XIP_IRQ])]
 mod app {
+    use core::mem::MaybeUninit;
     use defmt::*;
     use embedded_hal::digital::v2::ToggleableOutputPin;
     use pico_probe::setup::*;
@@ -25,7 +26,7 @@ mod app {
         led: LedPin,
     }
 
-    #[init(local = [usb_bus: Option<UsbBusAllocator<UsbBus>> = None])]
+    #[init(local = [usb_bus: MaybeUninit<UsbBusAllocator<UsbBus>> = MaybeUninit::uninit()])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         let (mono, led, probe_usb, dap_handler) = setup(cx.device, cx.local.usb_bus);
 

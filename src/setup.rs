@@ -1,3 +1,6 @@
+use crate::dap::{Context, Jtag, Leds, Swd, Swo, Wait};
+use crate::{dap, usb::ProbeUsb};
+use core::mem::MaybeUninit;
 use rp2040_monotonic::Rp2040Monotonic;
 use rp_pico::{
     hal::{
@@ -10,11 +13,7 @@ use rp_pico::{
     },
     XOSC_CRYSTAL_FREQ,
 };
-
 use usb_device::class_prelude::UsbBusAllocator;
-
-use crate::dap::{Context, Jtag, Leds, Swd, Swo, Wait};
-use crate::{dap, usb::ProbeUsb};
 
 pub type DapHandler = dap_rs::dap::Dap<'static, Context, Leds, Wait, Jtag, Swd, Swo>;
 pub type LedPin = Pin<Gpio25, PushPullOutput>;
@@ -22,7 +21,7 @@ pub type LedPin = Pin<Gpio25, PushPullOutput>;
 #[inline(always)]
 pub fn setup(
     pac: pac::Peripherals,
-    usb_bus: &'static mut Option<UsbBusAllocator<UsbBus>>,
+    usb_bus: &'static mut MaybeUninit<UsbBusAllocator<UsbBus>>,
 ) -> (Rp2040Monotonic, LedPin, ProbeUsb, DapHandler) {
     let mut resets = pac.RESETS;
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -37,7 +36,7 @@ pub fn setup(
     )
     .ok());
 
-    let usb_bus: &'static _ = usb_bus.insert(UsbBusAllocator::new(UsbBus::new(
+    let usb_bus: &'static _ = usb_bus.write(UsbBusAllocator::new(UsbBus::new(
         pac.USBCTRL_REGS,
         pac.USBCTRL_DPRAM,
         clocks.usb_clock,

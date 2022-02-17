@@ -145,10 +145,12 @@ impl swj::Swj for Context {
     }
 
     fn set_clock(&mut self, max_frequency: u32) -> bool {
-        trace!("Running SWJ clock:  freq = {}", max_frequency);
+        trace!("Running SWJ clock");
         if max_frequency < self.cpu_frequency {
             self.max_frequency = max_frequency;
             self.half_period_ticks = self.cpu_frequency / self.max_frequency / 2;
+            trace!("  freq = {}", max_frequency);
+            trace!("  half_period_ticks = {}", self.half_period_ticks);
             true
         } else {
             false
