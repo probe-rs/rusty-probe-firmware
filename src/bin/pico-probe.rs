@@ -26,9 +26,13 @@ mod app {
         led: LedPin,
     }
 
-    #[init(local = [usb_bus: MaybeUninit<UsbBusAllocator<UsbBus>> = MaybeUninit::uninit()])]
+    #[init(local = [
+        usb_bus: MaybeUninit<UsbBusAllocator<UsbBus>> = MaybeUninit::uninit(),
+        delay: MaybeUninit<pico_probe::systick_delay::Delay> = MaybeUninit::uninit(),
+    ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
-        let (mono, led, probe_usb, dap_handler) = setup(cx.device, cx.local.usb_bus);
+        let (mono, led, probe_usb, dap_handler) =
+            setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
 
         led_blinker::spawn().ok();
 
@@ -60,7 +64,6 @@ mod app {
 
             match request {
                 Request::DAP1Command((report, n)) => {
-                    info!("Got DAP v1 command");
                     let len = dap.process_command(&report[..n], resp_buf, DapVersion::V1);
 
                     if len > 0 {
@@ -68,7 +71,6 @@ mod app {
                     }
                 }
                 Request::DAP2Command((report, n)) => {
-                    info!("Got DAP v2 command");
                     let len = dap.process_command(&report[..n], resp_buf, DapVersion::V2);
 
                     if len > 0 {

@@ -1,3 +1,4 @@
+use cortex_m::peripheral::SYST;
 use dap_rs::{swj::Swj, *};
 use defmt::*;
 use embedded_hal::{
@@ -6,11 +7,14 @@ use embedded_hal::{
 };
 use rp_pico::hal::gpio::DynPin;
 
+use crate::systick_delay::Delay;
+
 pub struct Context {
     max_frequency: u32,
     cpu_frequency: u32,
     cycles_per_us: u32,
     half_period_ticks: u32,
+    delay: &'static Delay,
     swdio: DynPin,
     swclk: DynPin,
     nreset: DynPin,
@@ -50,7 +54,13 @@ impl dap::DapContext for Context {
 }
 
 impl Context {
-    fn from_pins(swdio: DynPin, swclk: DynPin, nreset: DynPin, cpu_frequency: u32) -> Self {
+    fn from_pins(
+        swdio: DynPin,
+        swclk: DynPin,
+        nreset: DynPin,
+        cpu_frequency: u32,
+        delay: &'static Delay,
+    ) -> Self {
         let max_frequency = 100_000;
         let half_period_ticks = cpu_frequency / max_frequency / 2;
         Context {
@@ -58,6 +68,7 @@ impl Context {
             cpu_frequency,
             cycles_per_us: cpu_frequency / 1_000_000,
             half_period_ticks,
+            delay,
             swdio,
             swclk,
             nreset,
@@ -76,7 +87,7 @@ impl swj::Swj for Context {
                 } else {
                     PinState::Low
                 })
-                .unwrap();
+                .ok();
         }
 
         if mask.contains(swj::Pins::SWDIO) {
@@ -87,7 +98,7 @@ impl swj::Swj for Context {
                 } else {
                     PinState::Low
                 })
-                .unwrap();
+                .ok();
         }
 
         if mask.contains(swj::Pins::NRESET) {
@@ -96,20 +107,20 @@ impl swj::Swj for Context {
                 self.nreset.into_floating_disabled();
             } else {
                 self.nreset.into_push_pull_output();
-                self.nreset.set_low().unwrap();
+                self.nreset.set_low().ok();
             }
         }
 
-        cortex_m::asm::delay(self.cycles_per_us * wait_us);
+        self.delay.delay_ticks(self.cycles_per_us * wait_us);
 
         self.swclk.into_floating_input();
         self.swdio.into_floating_input();
         self.nreset.into_floating_input();
 
         let mut ret = swj::Pins::empty();
-        ret.set(swj::Pins::SWCLK, self.swclk.is_high().unwrap());
-        ret.set(swj::Pins::SWDIO, self.swdio.is_high().unwrap());
-        ret.set(swj::Pins::NRESET, self.nreset.is_high().unwrap());
+        ret.set(swj::Pins::SWCLK, matches!(self.swclk.is_high(), Ok(true)));
+        ret.set(swj::Pins::SWDIO, matches!(self.swdio.is_high(), Ok(true)));
+        ret.set(swj::Pins::NRESET, matches!(self.nreset.is_high(), Ok(true)));
 
         ret
     }
@@ -120,6 +131,8 @@ impl swj::Swj for Context {
         self.swclk.into_push_pull_output();
 
         let half_period_ticks = self.half_period_ticks;
+        let mut last = self.delay.get_current();
+        last = self.delay.delay_ticks_from_last(half_period_ticks, last);
 
         for byte in data {
             let mut byte = *byte;
@@ -128,14 +141,14 @@ impl swj::Swj for Context {
                 let bit = byte & 1;
                 byte >>= 1;
                 if bit != 0 {
-                    self.swdio.set_high().unwrap();
+                    self.swdio.set_high().ok();
                 } else {
-                    self.swdio.set_low().unwrap();
+                    self.swdio.set_low().ok();
                 }
-                self.swclk.set_low().unwrap();
-                cortex_m::asm::delay(half_period_ticks);
-                self.swclk.set_high().unwrap();
-                cortex_m::asm::delay(half_period_ticks);
+                self.swclk.set_low().ok();
+                last = self.delay.delay_ticks_from_last(half_period_ticks, last);
+                self.swclk.set_high().ok();
+                last = self.delay.delay_ticks_from_last(half_period_ticks, last);
             }
             bits -= frame_bits;
         }
@@ -239,7 +252,8 @@ impl swd::Swd<Context> for Swd {
         let (data, parity) = self.read_data();
 
         // Turnaround + trailing
-        self.read_bit();
+        let mut last = self.0.delay.get_current();
+        self.read_bit(&mut last);
         self.tx8(0); // Drive the SWDIO line to 0 to not float
 
         if parity as u8 == (data.count_ones() as u8 & 1) {
@@ -288,8 +302,11 @@ impl Swd {
     fn tx8(&mut self, mut data: u8) {
         self.0.swdio.into_push_pull_output();
         self.0.swclk.into_push_pull_output();
+
+        let mut last = self.0.delay.get_current();
+
         for _ in 0..8 {
-            self.write_bit(data & 1);
+            self.write_bit(data & 1, &mut last);
             data >>= 1;
         }
     }
@@ -299,10 +316,11 @@ impl Swd {
         self.0.swclk.into_push_pull_output();
 
         let mut data = 0;
+        let mut last = self.0.delay.get_current();
 
         for _ in 0..4 {
             data <<= 1;
-            data |= self.read_bit() & 1;
+            data |= self.read_bit(&mut last) & 1;
         }
 
         data
@@ -312,11 +330,13 @@ impl Swd {
         self.0.swdio.into_floating_input();
         self.0.swclk.into_push_pull_output();
 
+        let mut last = self.0.delay.get_current();
+
         let mut data = 0;
 
         for _ in 0..5 {
             data <<= 1;
-            data |= self.read_bit() & 1;
+            data |= self.read_bit(&mut last) & 1;
         }
 
         data
@@ -326,12 +346,14 @@ impl Swd {
         self.0.swdio.into_push_pull_output();
         self.0.swclk.into_push_pull_output();
 
+        let mut last = self.0.delay.get_current();
+
         for _ in 0..32 {
-            self.write_bit((data & 1) as u8);
+            self.write_bit((data & 1) as u8, &mut last);
             data >>= 1;
         }
 
-        self.write_bit(parity as u8);
+        self.write_bit(parity as u8, &mut last);
     }
 
     fn read_data(&mut self) -> (u32, bool) {
@@ -340,34 +362,43 @@ impl Swd {
 
         let mut data = 0;
 
+        let mut last = self.0.delay.get_current();
+
         for _ in 0..32 {
             data <<= 1;
-            data |= (self.read_bit() & 1) as u32;
+            data |= (self.read_bit(&mut last) & 1) as u32;
         }
 
-        let parity = self.read_bit() != 0;
+        let parity = self.read_bit(&mut last) != 0;
 
         (data, parity)
     }
 
-    fn write_bit(&mut self, bit: u8) {
+    #[inline(always)]
+    fn write_bit(&mut self, bit: u8, last: &mut u32) {
         if bit != 0 {
-            self.0.swdio.set_high().unwrap();
+            self.0.swdio.set_high().ok();
         } else {
-            self.0.swdio.set_low().unwrap();
+            self.0.swdio.set_low().ok();
         }
-        self.0.swclk.set_low().unwrap();
-        cortex_m::asm::delay(self.0.half_period_ticks);
-        self.0.swclk.set_high().unwrap();
-        cortex_m::asm::delay(self.0.half_period_ticks);
+
+        let half_period_ticks = self.0.half_period_ticks;
+
+        self.0.swclk.set_low().ok();
+        *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
+        self.0.swclk.set_high().ok();
+        *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
     }
 
-    fn read_bit(&mut self) -> u8 {
-        self.0.swclk.set_low().unwrap();
-        cortex_m::asm::delay(self.0.half_period_ticks);
-        let bit = self.0.swdio.is_high().unwrap() as u8;
-        self.0.swclk.set_high().unwrap();
-        cortex_m::asm::delay(self.0.half_period_ticks);
+    #[inline(always)]
+    fn read_bit(&mut self, last: &mut u32) -> u8 {
+        let half_period_ticks = self.0.half_period_ticks;
+
+        self.0.swclk.set_low().ok();
+        *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
+        let bit = matches!(self.0.swdio.is_high(), Ok(true)) as u8;
+        self.0.swclk.set_high().ok();
+        *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
 
         bit
     }
@@ -422,22 +453,19 @@ impl swo::Swo for Swo {
     }
 }
 
-#[derive(Debug, defmt::Format)]
 pub struct Wait {
-    cycles_per_us: u32,
+    delay: &'static Delay,
 }
 
 impl Wait {
-    pub fn new(cpu_frequency: u32) -> Self {
-        Wait {
-            cycles_per_us: cpu_frequency / 1_000_000,
-        }
+    pub fn new(delay: &'static Delay) -> Self {
+        Wait { delay }
     }
 }
 
 impl DelayUs<u32> for Wait {
     fn delay_us(&mut self, us: u32) {
-        cortex_m::asm::delay(self.cycles_per_us * us);
+        self.delay.delay_us(us);
     }
 }
 
@@ -448,10 +476,11 @@ pub fn create_dap(
     swclk: DynPin,
     nreset: DynPin,
     cpu_frequency: u32,
+    delay: &'static Delay,
 ) -> dap::Dap<'static, Context, Leds, Wait, Jtag, Swd, Swo> {
-    let context = Context::from_pins(swdio, swclk, nreset, cpu_frequency);
+    let context = Context::from_pins(swdio, swclk, nreset, cpu_frequency, delay);
     let leds = Leds {};
-    let wait = Wait::new(cpu_frequency);
+    let wait = Wait::new(delay);
     let swo = None;
 
     defmt::info!("Making dap interface with context: {}", context);

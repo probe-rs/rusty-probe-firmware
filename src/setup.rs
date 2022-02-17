@@ -1,4 +1,5 @@
 use crate::dap::{Context, Jtag, Leds, Swd, Swo, Wait};
+use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use rp2040_monotonic::Rp2040Monotonic;
@@ -21,7 +22,9 @@ pub type LedPin = Pin<Gpio25, PushPullOutput>;
 #[inline(always)]
 pub fn setup(
     pac: pac::Peripherals,
+    core: cortex_m::Peripherals,
     usb_bus: &'static mut MaybeUninit<UsbBusAllocator<UsbBus>>,
+    delay: &'static mut MaybeUninit<Delay>,
 ) -> (Rp2040Monotonic, LedPin, ProbeUsb, DapHandler) {
     let mut resets = pac.RESETS;
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -60,12 +63,15 @@ pub fn setup(
     ck.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
     ck.set_slew_rate(OutputSlewRate::Fast);
 
+    let delay = delay.write(Delay::new(core.SYST, clocks.system_clock.freq().0));
+
     let dap_hander = dap::create_dap(
         "1.2.3-sdfsesd",
         io.into(),
         ck.into(),
         reset.into(),
         clocks.system_clock.freq().0,
+        delay,
     );
 
     let mono = Rp2040Monotonic::new(pac.TIMER);

@@ -7,6 +7,7 @@ use panic_probe as _;
 pub mod dap;
 pub mod device_signature;
 pub mod setup;
+pub mod systick_delay;
 pub mod usb;
 
 defmt::timestamp! {"{=u64}", {
