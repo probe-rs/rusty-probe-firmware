@@ -1,33 +1,28 @@
 [package]
-authors = ["Henrik Alsér <henrik.alser@me.com>"]
+authors = ["Emil Fresk <emil.fresk@gmail.com>"]
 edition = "2021"
 name = "pico-probe"
 version = "0.1.0"
 
 [dependencies]
+bitflags = "1.3.2"
 cortex-m = "0.7.3"
 cortex-m-rtic = "1.0.0"
-rp2040-monotonic = "1.0.0"
-
-embedded-hal = { version = "0.2.5", features=["unproven"] }
-
 defmt = { version = "0.3.0", features = ["encoding-rzcobs"] }
 defmt-rtt = "0.3.0"
+embedded-hal = { version = "0.2.5", features = ["unproven"] }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
-
-usb-device= "0.2.8"
-usbd-serial = "0.1.1"
-usbd-hid = "0.5.1"
-
-dap-rs = { path = "../debug-traits", features = ["defmt"] }
-
-# We're using a Pico by default on this template
-rp-pico = "0.2.0"
 replace_with = { version = "0.1.7", default-features = false, features = ["panic_abort"] }
-bitflags = "1.3.2"
+rp-pico = "0.2.0"
+rp2040-monotonic = "1.0.0"
+usb-device = "0.2.8"
+usbd-serial = "0.1.1"
+# but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead# sparkfun-pro-micro-rp2040 = "0.1.0"
 
-# but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead
-# sparkfun-pro-micro-rp2040 = "0.1.0"
+[dependencies.dap-rs]
+git = "https://github.com/korken89/dap-rs.git"
+# path = "../debug-traits"
+features = ["defmt"] 
 
 # If you're not going to use a Board Support Package you'll need these:
 # rp2040-hal = { version="0.3.0", features=["rt"] }
