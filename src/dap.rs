@@ -230,16 +230,19 @@ impl swd::Swd<Context> for Swd {
     }
 
     fn read_inner(&mut self, apndp: swd::APnDP, a: swd::DPRegister) -> swd::Result<u32> {
-        trace!("SWD read inner");
         // Send request
         let req = swd::make_request(apndp, swd::RnW::R, a);
         self.tx8(req);
 
         // Read ack, 1 clock for turnaround and 3 for ACK
         let ack = self.rx4() >> 1;
+
+        trace!("SWD read, ack: {:b}", ack);
+
         match swd::Ack::try_ok(ack as u8) {
-            Ok(_) => (),
+            Ok(_) => trace!("    ack ok"),
             Err(e) => {
+                trace!("    ack error: {}", e);
                 // On non-OK ACK, target has released the bus but
                 // is still expecting a turnaround clock before
                 // the next request, and we need to take over the bus.
@@ -264,16 +267,17 @@ impl swd::Swd<Context> for Swd {
     }
 
     fn write_inner(&mut self, apndp: swd::APnDP, a: swd::DPRegister, data: u32) -> swd::Result<()> {
-        trace!("SWD write ");
         // Send request
         let req = swd::make_request(apndp, swd::RnW::W, a);
         self.tx8(req);
 
         // Read ack, 1 clock for turnaround and 3 for ACK and 1 for turnaround
         let ack = (self.rx5() >> 1) & 0b111;
+        trace!("SWD write, ack: {:b}", ack);
         match swd::Ack::try_ok(ack as u8) {
-            Ok(_) => (),
+            Ok(_) => trace!("    ack ok"),
             Err(e) => {
+                trace!("    ack err: {}", e);
                 // On non-OK ACK, target has released the bus but
                 // is still expecting a turnaround clock before
                 // the next request, and we need to take over the bus.
@@ -318,9 +322,8 @@ impl Swd {
         let mut data = 0;
         let mut last = self.0.delay.get_current();
 
-        for _ in 0..4 {
-            data <<= 1;
-            data |= self.read_bit(&mut last) & 1;
+        for i in 0..4 {
+            data |= (self.read_bit(&mut last) & 1) << i;
         }
 
         data
@@ -334,9 +337,8 @@ impl Swd {
 
         let mut data = 0;
 
-        for _ in 0..5 {
-            data <<= 1;
-            data |= self.read_bit(&mut last) & 1;
+        for i in 0..5 {
+            data |= (self.read_bit(&mut last) & 1) << i;
         }
 
         data
@@ -364,9 +366,8 @@ impl Swd {
 
         let mut last = self.0.delay.get_current();
 
-        for _ in 0..32 {
-            data <<= 1;
-            data |= (self.read_bit(&mut last) & 1) as u32;
+        for i in 0..32 {
+            data |= (self.read_bit(&mut last) as u32 & 1) << i;
         }
 
         let parity = self.read_bit(&mut last) != 0;
