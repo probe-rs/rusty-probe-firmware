@@ -230,14 +230,13 @@ impl swd::Swd<Context> for Swd {
     }
 
     fn read_inner(&mut self, apndp: swd::APnDP, a: swd::DPRegister) -> swd::Result<u32> {
+        trace!("SWD read, apndp: {}, addr: {}", apndp, a,);
         // Send request
         let req = swd::make_request(apndp, swd::RnW::R, a);
         self.tx8(req);
 
         // Read ack, 1 clock for turnaround and 3 for ACK
         let ack = self.rx4() >> 1;
-
-        trace!("SWD read, ack: {:b}", ack);
 
         match swd::Ack::try_ok(ack as u8) {
             Ok(_) => trace!("    ack ok"),
@@ -260,6 +259,7 @@ impl swd::Swd<Context> for Swd {
         self.tx8(0); // Drive the SWDIO line to 0 to not float
 
         if parity as u8 == (data.count_ones() as u8 & 1) {
+            trace!("    data: 0x{:x}", data);
             Ok(data)
         } else {
             Err(swd::Error::BadParity)
@@ -267,13 +267,19 @@ impl swd::Swd<Context> for Swd {
     }
 
     fn write_inner(&mut self, apndp: swd::APnDP, a: swd::DPRegister, data: u32) -> swd::Result<()> {
+        trace!(
+            "SWD write, apndp: {}, addr: {}, data: 0x{:x}",
+            apndp,
+            a,
+            data
+        );
+
         // Send request
         let req = swd::make_request(apndp, swd::RnW::W, a);
         self.tx8(req);
 
         // Read ack, 1 clock for turnaround and 3 for ACK and 1 for turnaround
         let ack = (self.rx5() >> 1) & 0b111;
-        trace!("SWD write, ack: {:b}", ack);
         match swd::Ack::try_ok(ack as u8) {
             Ok(_) => trace!("    ack ok"),
             Err(e) => {
@@ -305,7 +311,6 @@ impl swd::Swd<Context> for Swd {
 impl Swd {
     fn tx8(&mut self, mut data: u8) {
         self.0.swdio.into_push_pull_output();
-        self.0.swclk.into_push_pull_output();
 
         let mut last = self.0.delay.get_current();
 
@@ -317,7 +322,6 @@ impl Swd {
 
     fn rx4(&mut self) -> u8 {
         self.0.swdio.into_floating_input();
-        self.0.swclk.into_push_pull_output();
 
         let mut data = 0;
         let mut last = self.0.delay.get_current();
@@ -331,7 +335,6 @@ impl Swd {
 
     fn rx5(&mut self) -> u8 {
         self.0.swdio.into_floating_input();
-        self.0.swclk.into_push_pull_output();
 
         let mut last = self.0.delay.get_current();
 
@@ -346,7 +349,6 @@ impl Swd {
 
     fn send_data(&mut self, mut data: u32, parity: bool) {
         self.0.swdio.into_push_pull_output();
-        self.0.swclk.into_push_pull_output();
 
         let mut last = self.0.delay.get_current();
 
@@ -360,7 +362,6 @@ impl Swd {
 
     fn read_data(&mut self) -> (u32, bool) {
         self.0.swdio.into_floating_input();
-        self.0.swclk.into_push_pull_output();
 
         let mut data = 0;
 
