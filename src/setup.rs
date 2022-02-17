@@ -2,7 +2,7 @@ use rp2040_monotonic::Rp2040Monotonic;
 use rp_pico::{
     hal::{
         clocks::init_clocks_and_plls,
-        gpio::{pin::bank0::*, Pin, Pins, PushPullOutput},
+        gpio::{pin::bank0::*, OutputDriveStrength, OutputSlewRate, Pin, Pins, PushPullOutput},
         pac,
         usb::UsbBus,
         watchdog::Watchdog,
@@ -51,9 +51,15 @@ pub fn setup(
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
 
     let led = pins.gpio25.into_push_pull_output();
-    let io = pins.gpio14;
-    let ck = pins.gpio15;
+    let mut io = pins.gpio14;
+    let mut ck = pins.gpio15;
     let reset = pins.gpio13;
+
+    // High speed IO
+    io.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
+    io.set_slew_rate(OutputSlewRate::Fast);
+    ck.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
+    ck.set_slew_rate(OutputSlewRate::Fast);
 
     let dap_hander = dap::create_dap(
         "1.2.3-sdfsesd",
