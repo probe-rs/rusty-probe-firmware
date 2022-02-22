@@ -1,5 +1,4 @@
 use cortex_m::peripheral::{syst::SystClkSource, SYST};
-use embedded_hal::blocking::delay::DelayUs;
 
 pub struct Delay {
     systick: SYST,

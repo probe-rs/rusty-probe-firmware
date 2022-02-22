@@ -16,6 +16,7 @@ use rp_pico::{
 };
 use usb_device::class_prelude::UsbBusAllocator;
 
+
 pub type DapHandler = dap_rs::dap::Dap<'static, Context, Leds, Wait, Jtag, Swd, Swo>;
 pub type LedPin = Pin<Gpio25, PushPullOutput>;
 
@@ -49,6 +50,17 @@ pub fn setup(
 
     let probe_usb = ProbeUsb::new(&usb_bus);
 
+    let program = pio_proc::pio!(
+        32,
+        "
+        set pindirs, 1
+        .wrap_target
+        set pins, 0 [31]
+        set pins, 1 [31]
+        .wrap
+        "
+    );
+
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
 
@@ -65,8 +77,10 @@ pub fn setup(
 
     let delay = delay.write(Delay::new(core.SYST, clocks.system_clock.freq().0));
 
+    const GIT_VERSION: &'static str = git_version::git_version!();
+
     let dap_hander = dap::create_dap(
-        "1.2.3-sdfsesd",
+        GIT_VERSION,
         io.into(),
         ck.into(),
         reset.into(),

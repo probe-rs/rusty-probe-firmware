@@ -17,12 +17,11 @@ rp-pico = "0.2.0"
 rp2040-monotonic = "1.0.0"
 usb-device = "0.2.8"
 usbd-serial = "0.1.1"
-# but you can use any BSP. Uncomment this to use the pro_micro_rp2040 BSP instead# sparkfun-pro-micro-rp2040 = "0.1.0"
+dap-rs = { git = "https://github.com/korken89/dap-rs.git", features = ["defmt"] }
+git-version = "0.3.5"
 
-[dependencies.dap-rs]
-git = "https://github.com/korken89/dap-rs.git"
-# path = "../debug-traits"
-features = ["defmt"] 
+[dev-dependencies]
+pio-proc = "0.1"
 
 # If you're not going to use a Board Support Package you'll need these:
 # rp2040-hal = { version="0.3.0", features=["rt"] }
@@ -34,7 +33,7 @@ codegen-units = 1
 debug = 2
 debug-assertions = true
 incremental = false
-opt-level = 3
+opt-level = 's'
 overflow-checks = true
 
 # cargo build/run --release

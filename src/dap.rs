@@ -1,4 +1,4 @@
-use cortex_m::peripheral::SYST;
+use crate::systick_delay::Delay;
 use dap_rs::{swj::Swj, *};
 use defmt::*;
 use embedded_hal::{
@@ -6,8 +6,6 @@ use embedded_hal::{
     digital::v2::{InputPin, OutputPin, PinState},
 };
 use rp_pico::hal::gpio::DynPin;
-
-use crate::systick_delay::Delay;
 
 pub struct Context {
     max_frequency: u32,

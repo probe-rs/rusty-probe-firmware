@@ -33,9 +33,10 @@ Start the Pico in bootloader mode and drop the `pico-probe.uf2` file to it, done
 
 ## TODO
 
-- [ ] Add support for SWO (Manchester encoding via PIO)
-- [ ] Add support for VCP (it enumerates now, but ignores all data)
 - [ ] Move SWD impl to PIO
+- [ ] Add support for SWO (Manchester encoding or UART via PIO)
+- [ ] Add support for VCP (it enumerates now, but ignores all data)
+- [ ] Add the automatic polling of RTT buffers
 - [ ] Document the `dap-rs` traits and helpers
 - [ ] Document the firmware
 
