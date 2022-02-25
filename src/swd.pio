@@ -34,8 +34,6 @@
 
 .side_set 1 ; each instruction may set 1 bit
 
-; TODO
-
 ; 1. send request
 pull                        side 0
 set x, 7                    side 0
@@ -46,24 +44,22 @@ req:
     jmp x-- req             side 1
 
 ; 2. receive ack
-set pindirs 0               side 0
 
 ; turnaround
-nop                         side 1
-nop                         side 0
+set pindirs 0               side 1 ; input
+pull noblock                side 0 ; read the fifo in case of write
 
 ; read ACK (nop while testing with logic analyzer)
-nop side 1 ; jmp pin ack_ok              side 1 ; if first bit is 1, ack maybe OK
-           ; jmp ack_error               side 0 ; if 0, jump to error checking
-           ; ack_ok:
-nop side 0 ; nop                         side 0
-nop side 1 ; jmp pin ack_error_protocol  side 1 ; if second bit is 1, protocol error
+nop                         side 1 ; jmp pin ack_ok              side 1 ; if first bit is 1, ack maybe OK
+nop                         side 0 ; jmp ack_error               side 0 ; if 0, jump to error checking
+ack_ok:
+set y, 7                    side 0 ; y register is used for trailing clocks
+nop                         side 1 ; jmp pin ack_error_protocol  side 1 ; if second bit is 1, protocol error
 set x, 31                   side 0              ; prepare for read: 32bit data 
-nop side 1 ; jmp pin ack_error_protocol  side 1 ; if third bit is 1, protocol error
+; nop                         side 1 ; jmp pin ack_error_protocol  side 1 ; if third bit is 1, protocol error
 
 ; if there is no data in the output register, it's a read operation
-pull noblock                side 0
-jmp !osre write_data        side 0 
+jmp !osre write_data        side 1
 
 read_data:   ; we are in read from before, no need to set pindirs again
     read_loop:
@@ -76,7 +72,6 @@ read_data:   ; we are in read from before, no need to set pindirs again
     in pins, 1              side 1
     push                    side 0
 
-    set x, 7                side 1
     jmp trail_loop          side 0
 
 write_data:
@@ -89,22 +84,26 @@ write_data:
 
     pull  side 0
     out pins, 1         side 0 ; clock out parity
-    set x, 7            side 1
-    jmp trail_loop                    side 0
+    jmp trail_loop                    side 1
 
 ack_error:
 
-; TODO, figure out if WAIT or FAULT
+jmp pin ack_wait              side 1 ; if first bit is 1, ack maybe OK
+
+; FAULT is bundled with the other error
 
 ack_error_protocol:
-
 irq 1                       side 0 ; error
-set x, 31                   side 0
+
+ack_wait:
+irq 2                       side 0
+
+set y, 31                   side 0
 
 ; trailing clocks
 trail_loop:
     set pindirs 0           side 0 ; input
-    jmp x-- trail_loop      side 1
+    jmp y-- trail_loop      side 1
 
 done:
     irq wait 0              side 0
