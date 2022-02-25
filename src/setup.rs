@@ -3,6 +3,8 @@ use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use rp2040_monotonic::Rp2040Monotonic;
+use rp_pico::hal::gpio::FunctionPio0;
+use rp_pico::hal::pio::{PIOBuilder, PIOExt, PinDir};
 use rp_pico::{
     hal::{
         clocks::init_clocks_and_plls,
@@ -15,7 +17,6 @@ use rp_pico::{
     XOSC_CRYSTAL_FREQ,
 };
 use usb_device::class_prelude::UsbBusAllocator;
-
 
 pub type DapHandler = dap_rs::dap::Dap<'static, Context, Leds, Wait, Jtag, Swd, Swo>;
 pub type LedPin = Pin<Gpio25, PushPullOutput>;
@@ -49,17 +50,6 @@ pub fn setup(
     )));
 
     let probe_usb = ProbeUsb::new(&usb_bus);
-
-    let program = pio_proc::pio!(
-        32,
-        "
-        set pindirs, 1
-        .wrap_target
-        set pins, 0 [31]
-        set pins, 1 [31]
-        .wrap
-        "
-    );
 
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
