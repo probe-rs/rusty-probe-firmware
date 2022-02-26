@@ -1,10 +1,11 @@
+use embedded_hal::digital::v2::OutputPin;
 use rp_pico::{
     hal::{
         gpio::{
             bank0::{Gpio14, Gpio15},
             Disabled, DynPin, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin, PullDown,
         },
-        pio::{PIOBuilder, PIOExt, PinDir, ShiftDirection},
+        pio::{PIOBuilder, PIOExt, PinDir, PinState, ShiftDirection},
     },
     pac::{PIO0, RESETS},
 };
@@ -20,7 +21,8 @@ pub fn setup_pio(
     swdio.set_slew_rate(OutputSlewRate::Fast);
     swdclk.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
     swdclk.set_slew_rate(OutputSlewRate::Fast);
-    let swdclk = swdclk.into_push_pull_output();
+    let mut swdclk = swdclk.into_push_pull_output();
+    swdclk.set_low().ok();
 
     //// PIO
 
@@ -40,9 +42,9 @@ pub fn setup_pio(
 ;
 ;
 ; - side x is the swd clock signal
-; - uses auto push/pull with 8 bits limit
-; - IRQ 0 is done (TODO: check this is fine)
-; - IRQ 1 is error (TODO: check this is fine)
+; - uses auto pull with 32 bits limit
+; - uses manual push with 32 bits limit
+; - IRQ 0 is done flag
 ;
 ;
 ; Usage (sending):
@@ -50,92 +52,86 @@ pub fn setup_pio(
 ; txfifo.write(request_bytes);
 ; txfifo.write(data);
 ; txfifo.write(parity);
-; sm.start();
+; // clear done IRQ to start
 ; // wait for done IRQ
+; let ack = rxfifo.read().unwrap(); // check if it's OK
 ;
 ; Usage (receiving):
 ;
 ; txfifo.write(request_bytes);
-; sm.start();
+; // clear done IRQ to start
 ; // wait for done IRQ
-; let data = rxfifo.read();
-; let parity = rxfifo.read();
+; let ack = rxfifo.read().unwrap(); // check if it's OK
+; let data = rxfifo.read().unwrap();
+; let parity = rxfifo.read().unwrap(); // check if it's OK
 
 .side_set 1 ; each instruction may set 1 bit
 
-; 1. send request
-pull                        side 0
-set x, 7                    side 0
+; start; wait for the clearing of the done flag
+irq wait 0 rel                  side 0
 
-set pindirs 1               side 0 ; output
+; 1. send request (8)
+set x, 7                        side 0
+
+set pindirs 1                   side 0 ; output
 req:
-    out pins, 1             side 0
-    jmp x-- req             side 1
+    out pins, 1                 side 0
+    jmp x-- req                 side 1
+
+out null, 32                    side 0 ; discard the rest
 
 ; 2. receive ack
 
 ; turnaround
-set pindirs 0               side 1
-pull noblock                side 0 ; read the fifo in case of write
+set pindirs 0                   side 1 ; input
 
-; read ACK (nop while testing with logic analyzer)
-nop                         side 1 ; jmp pin ack_ok              side 1 ; if first bit is 1, ack maybe OK
-nop                         side 0 ; jmp ack_error               side 0 ; if 0, jump to error checking
-ack_ok:
-set y, 7                    side 0 ; y register is used for trailing clocks
-nop                         side 1 ; jmp pin ack_error_protocol  side 1 ; if second bit is 1, protocol error
-set x, 31                   side 0              ; prepare for read: 32bit data 
-; nop                         side 1 ; jmp pin ack_error_protocol  side 1 ; if third bit is 1, protocol error
+set x, 2                        side 0
+ack_loop:
+    in pins, 1                  side 1
+    jmp x-- ack_loop            side 0
 
+; push ack 
+push                            side 0
+
+; 3. read/write data 
+
+set x, 31                       side 0 ; prepare for 32bits of data 
 ; if there is no data in the output register, it's a read operation
-jmp !osre write_data        side 1
+jmp !osre write_data            side 0
 
 read_data:   ; we are in read from before, no need to set pindirs again
     read_loop:
-        in pins, 1          side 1
-        jmp x-- read_loop   side 0
+        in pins, 1              side 1
+        jmp x-- read_loop       side 0
 
-    push                    side 0
+    push                        side 0
 
     ; read parity
-    in pins, 1              side 1
-    push                    side 0
+    in pins, 1                  side 1
+    push                        side 0
 
-    jmp trail_loop          side 0
+    jmp trail_clocks            side 0
 
 write_data:
     ; turnaround (write)
-    set pindirs 1           side 1 ; output mode and turnaround clock
+    set pindirs 1               side 1 ; output mode and turnaround clock
 
     write_loop:
-        out pins, 1         side 0
-        jmp !osre write_loop  side 1
+        out pins, 1             side 0
+        jmp x-- write_loop      side 1
 
-    pull  side 0
-    out pins, 1         side 0 ; clock out parity
-    jmp trail_loop                    side 1
+    out pins, 1                 side 0 ; clock out parity
+    out null, 32                side 1 ; discard the rest
 
-ack_error:
-
-jmp pin ack_wait              side 1 ; if first bit is 1, ack maybe OK
-
-; FAULT is bundled with the other error
-
-ack_error_protocol:
-irq 1                       side 0 ; error
-
-ack_wait:
-irq 2                       side 0
-
-set y, 31                   side 0
+; 4. read/write data 
 
 ; trailing clocks
-trail_loop:
-    set pindirs 0           side 0 ; input
-    jmp y-- trail_loop      side 1
+trail_clocks:
+set y, 7                        side 0 ; y register is used for trailing clocks
 
-done:
-    irq wait 0              side 0
+trail_loop:
+    set pindirs 0               side 0 ; input
+    jmp y-- trail_loop          side 1
         "
     );
 
@@ -158,25 +154,58 @@ done:
         .out_pins(swdio.id().num, 1)
         .in_pin_base(swdio.id().num)
         .set_pins(swdio.id().num, 1)
-        // .autopull(true)
-        // .pull_threshold(8)
-        .autopush(true)
-        .push_threshold(8)
+        .autopull(true)
+        .autopush(false)
+        .pull_threshold(32)
+        .push_threshold(32)
         .clock_divisor(div)
         .build(sm0);
 
     // The GPIO pin needs to be configured as an output.
+    sm.set_pins([(swdclk.id().num, PinState::Low)]);
     sm.set_pindirs([
         (swdio.id().num, PinDir::Input),
         (swdclk.id().num, PinDir::Output),
     ]);
 
+    let sm = sm.start();
+
+    let irq = &pio.interrupts()[0];
+
+    //
+    // Test RX
+    //
+
+    assert!(tx_fifo.write(0xaa));
+    // assert!(tx_fifo.write(0xf0f0f0f0u32));
+    // assert!(tx_fifo.write(0));
+
+    while !irq.raw().sm0() {} // Wait for start
+
+    defmt::info!("Started RX");
+    pio.clear_irq(1);
+
+    while !irq.raw().sm0() {} // Wait for done
+
+    defmt::info!("ack:    0x{:X}", rx_fifo.read().unwrap());
+    defmt::info!("data:   0x{:X}", rx_fifo.read().unwrap());
+    defmt::info!("parity: 0x{:X}", rx_fifo.read().unwrap());
+    assert!(rx_fifo.read().is_none());
+
+    //
+    // Test TX
+    //
+
     assert!(tx_fifo.write(0xaa));
     assert!(tx_fifo.write(0xf0f0f0f0u32));
-    // assert!(tx_fifo.write(0xf0u8));
-    // assert!(tx_fifo.write(0xf0u8));
-    // assert!(tx_fifo.write(0xf0u8));
     assert!(tx_fifo.write(0));
 
-    sm.start();
+    defmt::info!("");
+    defmt::info!("Started TX");
+    pio.clear_irq(1);
+
+    while !irq.raw().sm0() {} // Wait for done
+
+    defmt::info!("ack:    0x{:X}", rx_fifo.read().unwrap());
+    assert!(rx_fifo.read().is_none());
 }
