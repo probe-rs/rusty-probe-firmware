@@ -1,0 +1,36 @@
+; Goals:
+;
+; * Send data at max speed (F/2) for the SWJ Sequence command
+;
+; SWJ steps:
+; 1. Write a byte with how many bits to send (max for SWJ Sequence is 256, min is 1)
+; 2. Write bytes until done (this should make it operate well with DMA and iterating over a slice)
+;
+; - side x is the swd clock signal
+; - IRQ 0 is the done flag, needs clearing to start
+; - assumes autopull with size 8 is used
+; - assumes all pins are outputs
+;
+; Usage:
+;
+; txfifo.write(size u8); // size + 1 bits will be sent
+; // clear done IRQ to start (can be done before or after the writing of the size)
+; txfifo.write(data u8);
+; // ...
+; txfifo.write(data u8);
+
+.side_set 1 ; each instruction may set 1 bit
+
+; start; wait for the clearing of the done flag
+irq wait 0 rel          side 0
+
+; pull the count and place it in X
+pull ifempty            side 0
+mov x, osr              side 0
+; clear the OSR so we start getting data
+out null, 32            side 0 
+
+; clock out the number of bits specified
+req:
+    out pins, 1         side 0
+    jmp x-- req         side 1
