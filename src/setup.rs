@@ -3,8 +3,6 @@ use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use rp2040_monotonic::Rp2040Monotonic;
-use rp_pico::hal::gpio::FunctionPio0;
-use rp_pico::hal::pio::{PIOBuilder, PIOExt, PinDir};
 use rp_pico::{
     hal::{
         clocks::init_clocks_and_plls,

@@ -3,21 +3,20 @@ use rp_pico::hal::pac;
 use rp_pico::hal::rom_data;
 
 pub fn device_id_hex() -> &'static str {
-    static mut DEVICE_ID_STR: [u8; 16] = [0; 16];
+    static mut DEVICE_ID_STR: [u8; 22] = [0; 22];
 
     unsafe {
-        if DEVICE_ID_STR.as_ptr().read_volatile() == 0 {
-            interrupt::free(|_| {
+        interrupt::free(|_| {
+            if DEVICE_ID_STR.as_ptr().read_volatile() == 0 {
                 let hex = b"0123456789abcdef";
-                for (i, b) in read_uid().to_le_bytes().iter().enumerate() {
+                for (i, b) in read_uid().iter().chain(read_jedec().iter()).enumerate() {
                     let lo = b & 0xf;
                     let hi = (b >> 4) & 0xfu8;
                     DEVICE_ID_STR[i * 2] = hex[hi as usize];
                     DEVICE_ID_STR[i * 2 + 1] = hex[lo as usize];
                 }
-            });
-        }
-
+            }
+        });
         core::str::from_utf8_unchecked(&DEVICE_ID_STR)
     }
 }
@@ -76,7 +75,7 @@ unsafe fn do_flash_cmd(txrxbuf: &mut [u8]) {
     start();
 }
 
-fn read_uid() -> u64 {
+fn read_uid() -> [u8; 8] {
     const FLASH_RUID_CMD: u8 = 0x4b;
     const FLASH_RUID_DUMMY_BYTES: usize = 4;
     const FLASH_RUID_DATA_BYTES: usize = 8;
@@ -89,5 +88,19 @@ fn read_uid() -> u64 {
         do_flash_cmd(&mut buf);
     }
 
-    u64::from_le_bytes(buf[FLASH_RUID_DUMMY_BYTES + 1..].try_into().unwrap())
+    buf[FLASH_RUID_DUMMY_BYTES + 1..].try_into().unwrap()
+}
+
+fn read_jedec() -> [u8; 3] {
+    const FLASH_JEDEC_CMD: u8 = 0x9f;
+    const FLASH_JEDEC_TOTAL_BYTES: usize = 4;
+
+    let mut buf = [0; FLASH_JEDEC_TOTAL_BYTES];
+    buf[0] = FLASH_JEDEC_CMD;
+
+    unsafe {
+        do_flash_cmd(&mut buf);
+    }
+
+    buf[1..].try_into().unwrap()
 }

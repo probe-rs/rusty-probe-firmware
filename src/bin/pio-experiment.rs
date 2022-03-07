@@ -7,16 +7,8 @@ use pico_probe as _;
 mod app {
     use defmt::*;
     use rp2040_monotonic::*;
-    use rp_pico::hal::gpio::FunctionPio0;
-    use rp_pico::hal::pio::{PIOBuilder, PIOExt, PinDir};
     use rp_pico::{
-        hal::{
-            clocks::init_clocks_and_plls,
-            gpio::{pin::bank0::*, OutputDriveStrength, OutputSlewRate, Pin, Pins, PushPullOutput},
-            pac,
-            watchdog::Watchdog,
-            Clock, Sio,
-        },
+        hal::{clocks::init_clocks_and_plls, gpio::Pins, watchdog::Watchdog, Sio},
         XOSC_CRYSTAL_FREQ,
     };
 

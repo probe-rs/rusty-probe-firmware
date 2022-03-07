@@ -34,6 +34,8 @@
 ; let data = rxfifo.read().unwrap();
 ; let parity = rxfifo.read().unwrap(); // check if it's OK
 
+.program swd_rxtx
+
 .side_set 1 ; each instruction may set 1 bit
 
 ; start; wait for the clearing of the done flag
@@ -59,12 +61,12 @@ ack_loop:
     in pins, 1                  side 1
     jmp x-- ack_loop            side 0
 
-; push ack 
+; push ack
 push                            side 0
 
-; 3. read/write data 
+; 3. read/write data
 
-set x, 31                       side 0 ; prepare for 32bits of data 
+set x, 31                       side 0 ; prepare for 32bits of data
 ; if there is no data in the output register, it's a read operation
 jmp !osre write_data            side 0
 
@@ -92,7 +94,7 @@ write_data:
     out pins, 1                 side 0 ; clock out parity
     out null, 32                side 1 ; discard the rest
 
-; 4. read/write data 
+; 4. read/write data
 
 ; trailing clocks
 trail_clocks:
