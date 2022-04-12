@@ -1,6 +1,6 @@
 use cortex_m::interrupt;
-use rp_pico::hal::pac;
-use rp_pico::hal::rom_data;
+use rp2040_hal::pac;
+use rp2040_hal::rom_data;
 
 pub fn device_id_hex() -> &'static str {
     static mut DEVICE_ID_STR: [u8; 22] = [0; 22];
@@ -11,7 +11,7 @@ pub fn device_id_hex() -> &'static str {
                 let hex = b"0123456789abcdef";
                 for (i, b) in read_uid().iter().chain(read_jedec().iter()).enumerate() {
                     let lo = b & 0xf;
-                    let hi = (b >> 4) & 0xfu8;
+                    let hi = (b >> 4) & 0xf;
                     DEVICE_ID_STR[i * 2] = hex[hi as usize];
                     DEVICE_ID_STR[i * 2 + 1] = hex[lo as usize];
                 }

@@ -3,14 +3,15 @@
 
 use pico_probe as _;
 
-#[rtic::app(device = rp_pico::hal::pac, dispatchers = [XIP_IRQ])]
+#[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ])]
 mod app {
     use core::mem::MaybeUninit;
     use defmt::*;
+    use embedded_hal::adc::OneShot;
     use embedded_hal::digital::v2::ToggleableOutputPin;
     use pico_probe::setup::*;
+    use rp2040_hal::usb::UsbBus;
     use rp2040_monotonic::*;
-    use rp_pico::hal::usb::UsbBus;
     use usb_device::class_prelude::*;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
@@ -24,6 +25,7 @@ mod app {
         probe_usb: pico_probe::usb::ProbeUsb,
         dap_handler: DapHandler,
         led: LedPin,
+        adc: AdcReader,
     }
 
     #[init(local = [
@@ -31,7 +33,7 @@ mod app {
         delay: MaybeUninit<pico_probe::systick_delay::Delay> = MaybeUninit::uninit(),
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
-        let (mono, led, probe_usb, dap_handler) =
+        let (mono, led, probe_usb, dap_handler, adc) =
             setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
 
         led_blinker::spawn().ok();
@@ -42,14 +44,17 @@ mod app {
                 probe_usb,
                 dap_handler,
                 led,
+                adc,
             },
             init::Monotonics(mono),
         )
     }
 
-    #[task(local = [led])]
+    #[task(local = [led, adc])]
     fn led_blinker(cx: led_blinker::Context) {
         cx.local.led.toggle().ok();
+        let val = cx.local.adc.voltage();
+        defmt::info!("Vtgt = {} mV", val);
         led_blinker::spawn_after(500.millis()).ok();
     }
 

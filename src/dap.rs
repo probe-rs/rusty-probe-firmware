@@ -5,7 +5,7 @@ use embedded_hal::{
     blocking::delay::DelayUs,
     digital::v2::{InputPin, OutputPin, PinState},
 };
-use rp_pico::hal::gpio::DynPin;
+use rp2040_hal::gpio::DynPin;
 
 pub struct Context {
     max_frequency: u32,
@@ -16,6 +16,8 @@ pub struct Context {
     swdio: DynPin,
     swclk: DynPin,
     nreset: DynPin,
+    dir_swdio: DynPin,
+    dir_swclk: DynPin,
 }
 
 impl defmt::Format for Context {
@@ -45,17 +47,39 @@ impl core::fmt::Debug for Context {
 
 impl dap::DapContext for Context {
     fn high_impedance_mode(&mut self) {
-        self.swdio.into_floating_disabled();
-        self.swclk.into_floating_disabled();
-        self.nreset.into_floating_disabled();
+        self.swdio_to_input();
+        self.swclk_to_input();
+        self.nreset.into_floating_input();
     }
 }
 
 impl Context {
+    fn swdio_to_input(&mut self) {
+        self.swdio.into_pull_down_input();
+        self.dir_swdio.set_low().ok();
+    }
+
+    fn swdio_to_output(&mut self) {
+        self.dir_swdio.set_high().ok();
+        self.swdio.into_push_pull_output();
+    }
+
+    fn swclk_to_input(&mut self) {
+        self.swclk.into_pull_down_input();
+        self.dir_swclk.set_low().ok();
+    }
+
+    fn swclk_to_output(&mut self) {
+        self.dir_swclk.set_high().ok();
+        self.swclk.into_push_pull_output();
+    }
+
     fn from_pins(
         swdio: DynPin,
         swclk: DynPin,
         nreset: DynPin,
+        dir_swdio: DynPin,
+        dir_swclk: DynPin,
         cpu_frequency: u32,
         delay: &'static Delay,
     ) -> Self {
@@ -70,6 +94,8 @@ impl Context {
             swdio,
             swclk,
             nreset,
+            dir_swdio,
+            dir_swclk,
         }
     }
 }
@@ -78,7 +104,7 @@ impl swj::Swj for Context {
     fn pins(&mut self, output: swj::Pins, mask: swj::Pins, wait_us: u32) -> swj::Pins {
         trace!("Running SWJ_pins");
         if mask.contains(swj::Pins::SWCLK) {
-            self.swclk.into_push_pull_output();
+            self.swclk_to_output();
             self.swclk
                 .set_state(if output.contains(swj::Pins::SWCLK) {
                     PinState::High
@@ -89,7 +115,7 @@ impl swj::Swj for Context {
         }
 
         if mask.contains(swj::Pins::SWDIO) {
-            self.swdio.into_push_pull_output();
+            self.swdio_to_output();
             self.swdio
                 .set_state(if output.contains(swj::Pins::SWDIO) {
                     PinState::High
@@ -111,8 +137,8 @@ impl swj::Swj for Context {
 
         self.delay.delay_ticks(self.cycles_per_us * wait_us);
 
-        self.swclk.into_floating_input();
-        self.swdio.into_floating_input();
+        self.swclk_to_input();
+        self.swdio_to_input();
         self.nreset.into_floating_input();
 
         let mut ret = swj::Pins::empty();
@@ -125,8 +151,8 @@ impl swj::Swj for Context {
 
     fn sequence(&mut self, data: &[u8], mut bits: usize) {
         trace!("Running SWJ sequence");
-        self.swdio.into_push_pull_output();
-        self.swclk.into_push_pull_output();
+        self.swclk_to_output();
+        self.swdio_to_output();
 
         let half_period_ticks = self.half_period_ticks;
         let mut last = self.delay.get_current();
@@ -151,8 +177,8 @@ impl swj::Swj for Context {
             bits -= frame_bits;
         }
 
-        self.swclk.into_floating_input();
-        self.swdio.into_floating_input();
+        self.swclk_to_input();
+        self.swdio_to_input();
     }
 
     fn set_clock(&mut self, max_frequency: u32) -> bool {
@@ -208,16 +234,16 @@ impl swd::Swd<Context> for Swd {
 
     fn new(mut context: Context) -> Self {
         trace!("Creating SWD");
-        context.swdio.into_push_pull_output();
-        context.swclk.into_push_pull_output();
+        context.swclk_to_output();
+        context.swdio_to_output();
 
         Self(context)
     }
 
     fn release(mut self) -> Context {
         trace!("Releasing SWD");
-        self.0.swclk.into_floating_input();
-        self.0.swdio.into_floating_input();
+        self.0.swclk_to_input();
+        self.0.swdio_to_input();
 
         self.0
     }
@@ -308,7 +334,7 @@ impl swd::Swd<Context> for Swd {
 
 impl Swd {
     fn tx8(&mut self, mut data: u8) {
-        self.0.swdio.into_push_pull_output();
+        self.0.swdio_to_output();
 
         let mut last = self.0.delay.get_current();
 
@@ -319,7 +345,7 @@ impl Swd {
     }
 
     fn rx4(&mut self) -> u8 {
-        self.0.swdio.into_floating_input();
+        self.0.swdio_to_input();
 
         let mut data = 0;
         let mut last = self.0.delay.get_current();
@@ -332,7 +358,7 @@ impl Swd {
     }
 
     fn rx5(&mut self) -> u8 {
-        self.0.swdio.into_floating_input();
+        self.0.swdio_to_input();
 
         let mut last = self.0.delay.get_current();
 
@@ -346,7 +372,7 @@ impl Swd {
     }
 
     fn send_data(&mut self, mut data: u32, parity: bool) {
-        self.0.swdio.into_push_pull_output();
+        self.0.swdio_to_output();
 
         let mut last = self.0.delay.get_current();
 
@@ -359,7 +385,7 @@ impl Swd {
     }
 
     fn read_data(&mut self) -> (u32, bool) {
-        self.0.swdio.into_floating_input();
+        self.0.swdio_to_input();
 
         let mut data = 0;
 
@@ -475,10 +501,20 @@ pub fn create_dap(
     swdio: DynPin,
     swclk: DynPin,
     nreset: DynPin,
+    dir_swdio: DynPin,
+    dir_swclk: DynPin,
     cpu_frequency: u32,
     delay: &'static Delay,
 ) -> dap::Dap<'static, Context, Leds, Wait, Jtag, Swd, Swo> {
-    let context = Context::from_pins(swdio, swclk, nreset, cpu_frequency, delay);
+    let context = Context::from_pins(
+        swdio,
+        swclk,
+        nreset,
+        dir_swdio,
+        dir_swclk,
+        cpu_frequency,
+        delay,
+    );
     let leds = Leds {};
     let wait = Wait::new(delay);
     let swo = None;

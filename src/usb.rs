@@ -1,6 +1,6 @@
 use dap_rs::usb::{dap_v1::CmsisDapV1, dap_v2::CmsisDapV2, Request};
 use defmt::*;
-use rp_pico::hal::usb::UsbBus;
+use rp2040_hal::usb::UsbBus;
 use usb_device::{class_prelude::*, prelude::*};
 use usbd_serial::SerialPort;
 

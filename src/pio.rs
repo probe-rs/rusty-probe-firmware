@@ -1,13 +1,11 @@
 use embedded_hal::digital::v2::OutputPin;
-use rp_pico::{
-    hal::{
-        gpio::{
-            bank0::{Gpio14, Gpio15},
-            Disabled, DynPin, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin, PullDown,
-        },
-        pio::{PIOBuilder, PIOExt, PinDir, PinState, ShiftDirection},
+use rp2040_hal::{
+    gpio::{
+        bank0::{Gpio14, Gpio15},
+        Disabled, DynPin, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin, PullDown,
     },
     pac::{PIO0, RESETS},
+    pio::{PIOBuilder, PIOExt, PinDir, PinState, ShiftDirection},
 };
 
 pub fn setup_pio(
@@ -25,115 +23,7 @@ pub fn setup_pio(
     swdclk.set_low().ok();
 
     //// PIO
-
-    let program = pio_proc::pio!(
-        32,
-        "
-; Goals:
-;
-; * Send/receive data at max speed (F/2)
-; * Allow for sending or receiving, or use 2 PIO programs
-;
-; SWD Protocol steps:
-; 1. Send request byte
-; 2. Read ACK, return if error (send 32 clocks if error, as per standard)
-; 3. Send/Receive 32 bit word + parity
-; 4. Perform extra trailing clocks as per the standard
-;
-;
-; - side x is the swd clock signal
-; - uses auto pull with 32 bits limit
-; - uses manual push with 32 bits limit
-; - IRQ 0 is done flag
-;
-;
-; Usage (sending):
-;
-; txfifo.write(request_bytes);
-; txfifo.write(data);
-; txfifo.write(parity);
-; // clear done IRQ to start
-; // wait for done IRQ
-; let ack = rxfifo.read().unwrap(); // check if it's OK
-;
-; Usage (receiving):
-;
-; txfifo.write(request_bytes);
-; // clear done IRQ to start
-; // wait for done IRQ
-; let ack = rxfifo.read().unwrap(); // check if it's OK
-; let data = rxfifo.read().unwrap();
-; let parity = rxfifo.read().unwrap(); // check if it's OK
-
-.side_set 1 ; each instruction may set 1 bit
-
-; start; wait for the clearing of the done flag
-irq wait 0 rel                  side 0
-
-; 1. send request (8)
-set x, 7                        side 0
-
-set pindirs 1                   side 0 ; output
-req:
-    out pins, 1                 side 0
-    jmp x-- req                 side 1
-
-out null, 32                    side 0 ; discard the rest
-
-; 2. receive ack
-
-; turnaround
-set pindirs 0                   side 1 ; input
-
-set x, 2                        side 0
-ack_loop:
-    in pins, 1                  side 1
-    jmp x-- ack_loop            side 0
-
-; push ack 
-push                            side 0
-
-; 3. read/write data 
-
-set x, 31                       side 0 ; prepare for 32bits of data 
-; if there is no data in the output register, it's a read operation
-jmp !osre write_data            side 0
-
-read_data:   ; we are in read from before, no need to set pindirs again
-    read_loop:
-        in pins, 1              side 1
-        jmp x-- read_loop       side 0
-
-    push                        side 0
-
-    ; read parity
-    in pins, 1                  side 1
-    push                        side 0
-
-    jmp trail_clocks            side 0
-
-write_data:
-    ; turnaround (write)
-    set pindirs 1               side 1 ; output mode and turnaround clock
-
-    write_loop:
-        out pins, 1             side 0
-        jmp x-- write_loop      side 1
-
-    out pins, 1                 side 0 ; clock out parity
-    out null, 32                side 1 ; discard the rest
-
-; 4. read/write data 
-
-; trailing clocks
-trail_clocks:
-set y, 7                        side 0 ; y register is used for trailing clocks
-
-trail_loop:
-    set pindirs 0               side 0 ; input
-    jmp y-- trail_loop          side 1
-        "
-    );
+    let program = pio_proc::pio_file!("./src/swd.pio");
 
     // Initialize and start PIO
 
