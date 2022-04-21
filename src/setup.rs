@@ -203,7 +203,7 @@ impl TranslatorPower {
         mut vtranslator_pwm: Slice<Pwm2, FreeRunning>,
     ) -> Self {
         vtranslator_pwm.clr_ph_correct();
-        vtranslator_pwm.set_top(1023);
+        vtranslator_pwm.set_top(4095);
         vtranslator_pwm.enable();
 
         vtranslator_pin.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
@@ -265,7 +265,7 @@ impl TargetPower {
         enable_vtgt.set_low().ok();
 
         vtgt_pwm.clr_ph_correct();
-        vtgt_pwm.set_top(1023);
+        vtgt_pwm.set_top(4095);
         vtgt_pwm.enable();
 
         vtgt_pin.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
