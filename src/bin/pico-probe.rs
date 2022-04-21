@@ -33,7 +33,7 @@ mod app {
         delay: MaybeUninit<pico_probe::systick_delay::Delay> = MaybeUninit::uninit(),
     ])]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
-        let (mono, led, probe_usb, dap_handler, adc) =
+        let (mono, led, probe_usb, dap_handler, adc, translator_power, target_power) =
             setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
 
         led_blinker::spawn().ok();

@@ -12,7 +12,7 @@ use rp2040_hal::{
         PushPullOutput,
     },
     pac,
-    pwm::{self, FreeRunning, Pwm0, Slice},
+    pwm::{self, FreeRunning, Pwm0, Pwm2, Slice},
     usb::UsbBus,
     watchdog::Watchdog,
     Adc, Clock, Sio,
@@ -37,7 +37,15 @@ pub fn setup(
     core: cortex_m::Peripherals,
     usb_bus: &'static mut MaybeUninit<UsbBusAllocator<UsbBus>>,
     delay: &'static mut MaybeUninit<Delay>,
-) -> (Rp2040Monotonic, LedPin, ProbeUsb, DapHandler, AdcReader) {
+) -> (
+    Rp2040Monotonic,
+    LedPin,
+    ProbeUsb,
+    DapHandler,
+    AdcReader,
+    TranslatorPower,
+    TargetPower,
+) {
     let mut resets = pac.RESETS;
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
     let clocks = if let Ok(clocks) = init_clocks_and_plls(
@@ -67,7 +75,12 @@ pub fn setup(
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
 
-    let led = pins.gpio29.into_push_pull_output();
+    let mut led_red = pins.gpio27.into_push_pull_output();
+    led_red.set_high().ok();
+    let mut led_green = pins.gpio28.into_push_pull_output();
+    led_green.set_high().ok();
+    let mut led_blue = pins.gpio29.into_push_pull_output();
+    led_blue.set_high().ok();
 
     // Enable ADC
     let adc = Adc::new(pac.ADC, &mut resets);
@@ -84,6 +97,20 @@ pub fn setup(
     };
 
     let pwm_slices = pwm::Slices::new(pac.PWM, &mut resets);
+
+    ///////////////////////////////////
+    // Voltage translator power
+    ///////////////////////////////////
+
+    let pwm = pwm_slices.pwm2;
+
+    let mut translator_power = TranslatorPower::new(pins.gpio5.into_push_pull_output(), pwm);
+
+    translator_power.set_vtranslator(3300);
+
+    ///////////////////////////////////
+    // Target power
+    ///////////////////////////////////
 
     // Configure PWM
     let pwm = pwm_slices.pwm0;
@@ -106,6 +133,14 @@ pub fn setup(
     let mut dir_io = pins.gpio12;
     let mut dir_ck = pins.gpio21;
     let reset = pins.gpio9;
+
+    let tdi = pins.gpio17;
+    let dir_tdi = pins.gpio23;
+
+    let vcp_rx = pins.gpio18;
+    let vcp_tx = pins.gpio19;
+    let dir_vcp_rx = pins.gpio25;
+    let dir_vcp_tx = pins.gpio24;
 
     // High speed IO
     io.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
@@ -133,7 +168,15 @@ pub fn setup(
 
     let mono = Rp2040Monotonic::new(pac.TIMER);
 
-    (mono, led, probe_usb, dap_hander, adc)
+    (
+        mono,
+        led_blue,
+        probe_usb,
+        dap_hander,
+        adc,
+        translator_power,
+        target_power,
+    )
 }
 
 pub struct AdcReader {
@@ -150,16 +193,58 @@ impl AdcReader {
     }
 }
 
+pub struct TranslatorPower {
+    vtranslator_pwm: Slice<Pwm2, FreeRunning>,
+}
+
+impl TranslatorPower {
+    pub fn new(
+        mut vtranslator_pin: Pin<Gpio5, PushPullOutput>,
+        mut vtranslator_pwm: Slice<Pwm2, FreeRunning>,
+    ) -> Self {
+        vtranslator_pwm.clr_ph_correct();
+        vtranslator_pwm.set_top(1023);
+        vtranslator_pwm.enable();
+
+        vtranslator_pin.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
+        vtranslator_pin.set_slew_rate(OutputSlewRate::Fast);
+
+        // Output channel B on PWM2 to GPIO 5
+        let channel = &mut vtranslator_pwm.channel_b;
+        channel.output_to(vtranslator_pin);
+        channel.set_duty(1023);
+
+        Self { vtranslator_pwm }
+    }
+
+    pub fn set_vtranslator(&mut self, mv: u32) {
+        let v33 = 324; // duty cycle that give 3.3v (experimentally found, should come from the resistor math)
+        let v18 = 1023; // duty cycle that gives 1.8v (experimentally found, should come from the resistor math)
+
+        let vomin = 1820; // The actual voltage when PWM is set to v18 duty cycle
+        let vomax = 3300; // The actual voltage when PWM is set to v33 duty cycle
+
+        let mv = mv.min(vomax).max(vomin);
+
+        let limit_diff = v18 - v33;
+        let mv_diff = mv - vomin;
+
+        let cnt = ((vomax - vomin - mv_diff) * limit_diff) / (vomax - vomin) + v33;
+
+        let channel = &mut self.vtranslator_pwm.channel_b;
+        channel.set_duty(cnt as u16);
+    }
+}
+
 pub struct TargetPower {
     enable_5v_key: Pin<Gpio3, PushPullOutput>,
-    enable_5v: Pin<Gpio7, PushPullOutput>,
     enable_vtgt: Pin<Gpio6, PushPullOutput>,
     vtgt_pwm: Slice<Pwm0, FreeRunning>,
 }
 
 impl TargetPower {
     pub fn enable_vtgt(&mut self) {
-        self.enable_5v.set_high().ok();
+        self.enable_vtgt.set_high().ok();
     }
 
     pub fn enable_5v_key(&mut self) {
@@ -193,7 +278,6 @@ impl TargetPower {
 
         Self {
             enable_5v_key,
-            enable_5v,
             enable_vtgt,
             vtgt_pwm,
         }
