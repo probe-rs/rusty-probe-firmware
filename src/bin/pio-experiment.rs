@@ -3,14 +3,13 @@
 
 use pico_probe as _;
 
-#[rtic::app(device = rp_pico::hal::pac, dispatchers = [XIP_IRQ])]
+#[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ])]
 mod app {
     use defmt::*;
+    use rp2040_hal::{clocks::init_clocks_and_plls, gpio::Pins, watchdog::Watchdog, Sio};
     use rp2040_monotonic::*;
-    use rp_pico::{
-        hal::{clocks::init_clocks_and_plls, gpio::Pins, watchdog::Watchdog, Sio},
-        XOSC_CRYSTAL_FREQ,
-    };
+
+    const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
     #[monotonic(binds = TIMER_IRQ_0, default = true)]
     type Monotonic = Rp2040Monotonic;

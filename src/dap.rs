@@ -78,11 +78,17 @@ impl Context {
         swdio: DynPin,
         swclk: DynPin,
         nreset: DynPin,
-        dir_swdio: DynPin,
-        dir_swclk: DynPin,
+        mut dir_swdio: DynPin,
+        mut dir_swclk: DynPin,
         cpu_frequency: u32,
         delay: &'static Delay,
     ) -> Self {
+        dir_swdio.into_push_pull_output();
+        dir_swclk.into_push_pull_output();
+
+        dir_swdio.set_low().ok();
+        dir_swclk.set_low().ok();
+
         let max_frequency = 100_000;
         let half_period_ticks = cpu_frequency / max_frequency / 2;
         Context {

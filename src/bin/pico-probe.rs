@@ -3,7 +3,7 @@
 
 use pico_probe as _;
 
-#[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ])]
+#[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ, CLOCKS_IRQ])]
 mod app {
     use core::mem::MaybeUninit;
     use defmt::*;

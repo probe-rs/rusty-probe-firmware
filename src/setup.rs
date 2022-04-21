@@ -105,7 +105,7 @@ pub fn setup(
     let mut ck = pins.gpio11;
     let mut dir_io = pins.gpio12;
     let mut dir_ck = pins.gpio21;
-    let reset = pins.gpio13;
+    let reset = pins.gpio9;
 
     // High speed IO
     io.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
