@@ -218,10 +218,13 @@ impl TranslatorPower {
     }
 
     pub fn set_vtranslator(&mut self, mv: u32) {
-        let v33 = 324; // duty cycle that give 3.3v (experimentally found, should come from the resistor math)
-        let v18 = 1023; // duty cycle that gives 1.8v (experimentally found, should come from the resistor math)
+        // ans = 0.0900 * 4095
+        let v33 = 369; // duty cycle that give 3.3v
 
-        let vomin = 1820; // The actual voltage when PWM is set to v18 duty cycle
+        // ans = 0.7617 * 4095
+        let v18 = 3119; // duty cycle that gives 1.8v
+
+        let vomin = 1800; // The actual voltage when PWM is set to v18 duty cycle
         let vomax = 3300; // The actual voltage when PWM is set to v33 duty cycle
 
         let mv = mv.min(vomax).max(vomin);
@@ -284,10 +287,10 @@ impl TargetPower {
     }
 
     pub fn set_vtgt(&mut self, mv: u32) {
-        let v33 = 324; // duty cycle that give 3.3v (experimentally found, should come from the resistor math)
-        let v18 = 1023; // duty cycle that gives 1.8v (experimentally found, should come from the resistor math)
+        let v33 = 369; // duty cycle that give 3.3v
+        let v18 = 3119; // duty cycle that gives 1.8v
 
-        let vomin = 1820; // The actual voltage when PWM is set to v18 duty cycle
+        let vomin = 1800; // The actual voltage when PWM is set to v18 duty cycle
         let vomax = 3300; // The actual voltage when PWM is set to v33 duty cycle
 
         let mv = mv.min(vomax).max(vomin);
