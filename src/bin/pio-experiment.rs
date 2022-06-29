@@ -25,7 +25,7 @@ mod app {
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         let mut resets = cx.device.RESETS;
         let mut watchdog = Watchdog::new(cx.device.WATCHDOG);
-        let clocks = defmt::unwrap!(init_clocks_and_plls(
+        let _clocks = defmt::unwrap!(init_clocks_and_plls(
             XOSC_CRYSTAL_FREQ,
             cx.device.XOSC,
             cx.device.CLOCKS,
