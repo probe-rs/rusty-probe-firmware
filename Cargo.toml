@@ -13,14 +13,14 @@ defmt-rtt = "0.3.0"
 embedded-hal = { version = "0.2.5", features = ["unproven"] }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
 replace_with = { version = "0.1.7", default-features = false, features = ["panic_abort"] }
-rp-pico = "0.2.0"
+rp-pico = "0.4.1"
 rp2040-monotonic = "1.0.0"
 usb-device = "0.2.8"
 usbd-serial = "0.1.1"
 dap-rs = { git = "https://github.com/korken89/dap-rs.git", features = ["defmt"] }
 git-version = "0.3.5"
-pio-proc = "0.1"
-pio = "0.1"
+pio-proc = "0.2"
+pio = "0.2"
 
 # If you're not going to use a Board Support Package you'll need these:
 # rp2040-hal = { version="0.3.0", features=["rt"] }

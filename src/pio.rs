@@ -26,8 +26,7 @@ pub fn setup_pio(
 
     //// PIO
 
-    let program = pio_proc::pio!(
-        32,
+    let program = pio_proc::pio_asm!(
         "
 ; Goals:
 ;
@@ -168,7 +167,7 @@ trail_loop:
         (swdclk.id().num, PinDir::Output),
     ]);
 
-    let sm = sm.start();
+    let _sm = sm.start();
 
     let irq = &pio.interrupts()[0];
 
