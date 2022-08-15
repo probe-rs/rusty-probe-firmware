@@ -26,9 +26,10 @@ impl ProbeUsb {
 
         let id = crate::device_signature::device_id_hex();
         info!("Device ID: {}", id);
+
         let device = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0x4853))
             .manufacturer("Probe-rs development team")
-            .product("Pico-Probe with CMSIS-DAP v1/v2 Support")
+            .product("Rusty-Probe with CMSIS-DAP v1/v2 Support")
             .serial_number(id)
             .device_class(0)
             .max_packet_size_0(64)
