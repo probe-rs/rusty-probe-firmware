@@ -55,7 +55,7 @@ mod app {
         cx.local.led.toggle().ok();
         let val = cx.local.adc.voltage();
         defmt::info!("Vtgt = {} mV", val);
-        led_blinker::spawn_after(500.millis()).ok();
+        led_blinker::spawn_after(1000.millis()).ok();
     }
 
     #[task(binds = USBCTRL_IRQ, local = [probe_usb, dap_handler, resp_buf: [u8; 64] = [0; 64]])]

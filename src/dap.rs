@@ -55,21 +55,25 @@ impl dap::DapContext for Context {
 
 impl Context {
     fn swdio_to_input(&mut self) {
+        defmt::trace!("SWDIO -> input");
         self.swdio.into_pull_down_input();
         self.dir_swdio.set_low().ok();
     }
 
     fn swdio_to_output(&mut self) {
+        defmt::trace!("SWDIO -> output");
         self.dir_swdio.set_high().ok();
         self.swdio.into_push_pull_output();
     }
 
     fn swclk_to_input(&mut self) {
+        defmt::trace!("SWCLK -> input");
         self.swclk.into_pull_down_input();
         self.dir_swclk.set_low().ok();
     }
 
     fn swclk_to_output(&mut self) {
+        defmt::trace!("SWCLK -> output");
         self.dir_swclk.set_high().ok();
         self.swclk.into_push_pull_output();
     }
@@ -88,6 +92,8 @@ impl Context {
 
         dir_swdio.set_low().ok();
         dir_swclk.set_low().ok();
+        defmt::trace!("SWCLK -> input");
+        defmt::trace!("SWDIO -> input");
 
         let max_frequency = 100_000;
         let half_period_ticks = cpu_frequency / max_frequency / 2;
@@ -108,7 +114,6 @@ impl Context {
 
 impl swj::Swj for Context {
     fn pins(&mut self, output: swj::Pins, mask: swj::Pins, wait_us: u32) -> swj::Pins {
-        trace!("Running SWJ_pins");
         if mask.contains(swj::Pins::SWCLK) {
             self.swclk_to_output();
             self.swclk
@@ -152,11 +157,17 @@ impl swj::Swj for Context {
         ret.set(swj::Pins::SWDIO, matches!(self.swdio.is_high(), Ok(true)));
         ret.set(swj::Pins::NRESET, matches!(self.nreset.is_high(), Ok(true)));
 
+        trace!(
+            "Running SWJ_pins: mask {:08b}, output: {:08b}, read: {:08b}",
+            mask.bits(),
+            output.bits(),
+            ret.bits()
+        );
+
         ret
     }
 
     fn sequence(&mut self, data: &[u8], mut bits: usize) {
-        trace!("Running SWJ sequence");
         self.swclk_to_output();
         self.swdio_to_output();
 
@@ -164,6 +175,7 @@ impl swj::Swj for Context {
         let mut last = self.delay.get_current();
         last = self.delay.delay_ticks_from_last(half_period_ticks, last);
 
+        trace!("Running SWJ sequence: {}, len = {}", data, bits);
         for byte in data {
             let mut byte = *byte;
             let frame_bits = core::cmp::min(bits, 8);
@@ -241,7 +253,7 @@ impl swd::Swd<Context> for Swd {
     fn new(mut context: Context) -> Self {
         trace!("Creating SWD");
         context.swclk_to_output();
-        context.swdio_to_output();
+        // context.swdio_to_output();
 
         Self(context)
     }
@@ -249,7 +261,7 @@ impl swd::Swd<Context> for Swd {
     fn release(mut self) -> Context {
         trace!("Releasing SWD");
         self.0.swclk_to_input();
-        self.0.swdio_to_input();
+        // self.0.swdio_to_input();
 
         self.0
     }
@@ -263,8 +275,10 @@ impl swd::Swd<Context> for Swd {
         trace!("SWD read, apndp: {}, addr: {}", apndp, a,);
         // Send request
         let req = swd::make_request(apndp, swd::RnW::R, a);
+        trace!("SWD tx request");
         self.tx8(req);
 
+        trace!("SWD rx ack");
         // Read ack, 1 clock for turnaround and 3 for ACK
         let ack = self.rx4() >> 1;
 
@@ -281,6 +295,7 @@ impl swd::Swd<Context> for Swd {
         }
 
         // Read data and parity
+        trace!("SWD rx data");
         let (data, parity) = self.read_data();
 
         // Turnaround + trailing
@@ -306,9 +321,11 @@ impl swd::Swd<Context> for Swd {
 
         // Send request
         let req = swd::make_request(apndp, swd::RnW::W, a);
+        trace!("SWD tx request");
         self.tx8(req);
 
         // Read ack, 1 clock for turnaround and 3 for ACK and 1 for turnaround
+        trace!("SWD rx ack");
         let ack = (self.rx5() >> 1) & 0b111;
         match swd::Ack::try_ok(ack as u8) {
             Ok(_) => trace!("    ack ok"),
@@ -323,6 +340,7 @@ impl swd::Swd<Context> for Swd {
         }
 
         // Send data and parity
+        trace!("SWD tx data");
         let parity = data.count_ones() & 1 == 1;
         self.send_data(data, parity);
 
