@@ -153,7 +153,7 @@ pub fn setup(
     dir_ck.set_slew_rate(OutputSlewRate::Fast);
 
     let git_version: &'static str = git_version::git_version!();
-    let delay = delay.write(Delay::new(core.SYST, clocks.system_clock.freq().0));
+    let delay = delay.write(Delay::new(core.SYST, clocks.system_clock.freq().raw()));
 
     let dap_hander = dap::create_dap(
         git_version,
@@ -162,7 +162,7 @@ pub fn setup(
         reset.into(),
         dir_io.into(),
         dir_ck.into(),
-        clocks.system_clock.freq().0,
+        clocks.system_clock.freq().raw(),
         delay,
     );
 
