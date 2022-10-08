@@ -56,26 +56,28 @@ impl dap::DapContext for Context {
 impl Context {
     fn swdio_to_input(&mut self) {
         defmt::trace!("SWDIO -> input");
-        self.swdio.into_pull_down_input();
         self.dir_swdio.set_low().ok();
+        self.swdio.into_pull_down_input();
     }
 
     fn swdio_to_output(&mut self) {
         defmt::trace!("SWDIO -> output");
-        self.dir_swdio.set_high().ok();
         self.swdio.into_push_pull_output();
+        self.swdio.set_high().ok();
+        self.dir_swdio.set_high().ok();
     }
 
     fn swclk_to_input(&mut self) {
         defmt::trace!("SWCLK -> input");
-        self.swclk.into_pull_down_input();
         self.dir_swclk.set_low().ok();
+        self.swclk.into_pull_down_input();
     }
 
     fn swclk_to_output(&mut self) {
         defmt::trace!("SWCLK -> output");
-        self.dir_swclk.set_high().ok();
         self.swclk.into_push_pull_output();
+        self.swclk.set_high().ok();
+        self.dir_swclk.set_high().ok();
     }
 
     fn from_pins(
@@ -175,7 +177,7 @@ impl swj::Swj for Context {
         let mut last = self.delay.get_current();
         last = self.delay.delay_ticks_from_last(half_period_ticks, last);
 
-        trace!("Running SWJ sequence: {}, len = {}", data, bits);
+        trace!("Running SWJ sequence: {:08b}, len = {}", data, bits);
         for byte in data {
             let mut byte = *byte;
             let frame_bits = core::cmp::min(bits, 8);
@@ -330,7 +332,7 @@ impl swd::Swd<Context> for Swd {
         match swd::Ack::try_ok(ack as u8) {
             Ok(_) => trace!("    ack ok"),
             Err(e) => {
-                trace!("    ack err: {}", e);
+                trace!("    ack err: {}, data: {:b}", e, ack);
                 // On non-OK ACK, target has released the bus but
                 // is still expecting a turnaround clock before
                 // the next request, and we need to take over the bus.
