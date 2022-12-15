@@ -37,7 +37,6 @@ pub fn setup_pio(
 
     let (mut pio, sm0, _, _, _) = pio0.split(resets);
     let installed = pio.install(&program.program).unwrap();
-    let div = 0f32; // as slow as possible (0 is interpreted as 65536)
     let (mut sm, mut rx_fifo, mut tx_fifo) = PIOBuilder::from_program(installed)
         .side_set_pin_base(swdclk.id().num)
         .out_shift_direction(ShiftDirection::Right)
@@ -48,7 +47,7 @@ pub fn setup_pio(
         .autopush(false)
         .pull_threshold(32)
         .push_threshold(32)
-        .clock_divisor(div)
+        .clock_divisor_fixed_point(0, 0) // As slow as possible
         .build(sm0);
 
     // The GPIO pin needs to be configured as an output.
@@ -60,7 +59,7 @@ pub fn setup_pio(
 
     let sm = sm.start();
 
-    let irq = &pio.interrupts()[0];
+    let irq = &pio.irq0();
 
     //
     // Test RX
