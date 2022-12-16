@@ -63,7 +63,7 @@ pub fn setup(
     ck.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
     ck.set_slew_rate(OutputSlewRate::Fast);
 
-    let delay = delay.write(Delay::new(core.SYST, clocks.system_clock.freq().0));
+    let delay = delay.write(Delay::new(core.SYST, clocks.system_clock.freq().raw()));
 
     const GIT_VERSION: &'static str = git_version::git_version!();
 
@@ -72,7 +72,7 @@ pub fn setup(
         io.into(),
         ck.into(),
         reset.into(),
-        clocks.system_clock.freq().0,
+        clocks.system_clock.freq().raw(),
         delay,
     );
 
