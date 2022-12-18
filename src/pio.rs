@@ -1,8 +1,8 @@
 use embedded_hal::digital::v2::OutputPin;
 use rp2040_hal::{
     gpio::{
-        bank0::{Gpio14, Gpio15},
-        Disabled, DynPin, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin, PullDown,
+        bank0::*, Disabled, DynPin, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin,
+        PullDown,
     },
     pac::{PIO0, RESETS},
     pio::{PIOBuilder, PIOExt, PinDir, PinState, ShiftDirection},
@@ -11,29 +11,33 @@ use rp2040_hal::{
 pub fn setup_pio(
     resets: &mut RESETS,
     pio0: PIO0,
-    mut swdclk: Pin<Gpio15, Disabled<PullDown>>,
-    mut swdio: Pin<Gpio14, Disabled<PullDown>>,
+    mut swdclk: Pin<Gpio11, Disabled<PullDown>>,
+    mut swdio: Pin<Gpio10, Disabled<PullDown>>,
+    mut swdio_dir: Pin<Gpio12, Disabled<PullDown>>,
 ) -> () {
     // High speed IO
     swdio.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
     swdio.set_slew_rate(OutputSlewRate::Fast);
+    swdio_dir.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
+    swdio_dir.set_slew_rate(OutputSlewRate::Fast);
     swdclk.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
     swdclk.set_slew_rate(OutputSlewRate::Fast);
     let mut swdclk = swdclk.into_push_pull_output();
     swdclk.set_low().ok();
+    let mut swdio_dir = swdio_dir.into_push_pull_output();
+    swdio_dir.set_low().ok();
 
     //// PIO
     let program = pio_proc::pio_file!("./src/swd.pio");
 
     // Initialize and start PIO
 
-    // configure LED pin for Pio0.
     let swdclk: Pin<_, FunctionPio0> = swdclk.into_mode();
     let swdclk: DynPin = swdclk.into();
     let swdio: Pin<_, FunctionPio0> = swdio.into_mode();
     let swdio: DynPin = swdio.into();
-    // PIN id for use inside of PIO
-    // let pio_pin_id = 25;
+    let swdio_dir: Pin<_, FunctionPio0> = swdio_dir.into_mode();
+    let swdio_dir: DynPin = swdio_dir.into();
 
     let (mut pio, sm0, _, _, _) = pio0.split(resets);
     let installed = pio.install(&program.program).unwrap();
@@ -51,10 +55,14 @@ pub fn setup_pio(
         .build(sm0);
 
     // The GPIO pin needs to be configured as an output.
-    sm.set_pins([(swdclk.id().num, PinState::Low)]);
+    sm.set_pins([
+        (swdclk.id().num, PinState::Low),
+        (swdio_dir.id().num, PinState::Low),
+    ]);
     sm.set_pindirs([
         (swdio.id().num, PinDir::Input),
         (swdclk.id().num, PinDir::Output),
+        (swdio_dir.id().num, PinDir::Output),
     ]);
 
     let sm = sm.start();

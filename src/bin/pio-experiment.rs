@@ -46,11 +46,12 @@ mod app {
         );
 
         //  let led = pins.gpio25.into_push_pull_output();
-        let io = pins.gpio14;
-        let ck = pins.gpio15;
+        let io = pins.gpio10;
+        let io_dir = pins.gpio12;
+        let ck = pins.gpio11;
 
         println!("Starting PIO");
-        pico_probe::pio::setup_pio(&mut resets, cx.device.PIO0, ck, io);
+        pico_probe::pio::setup_pio(&mut resets, cx.device.PIO0, ck, io, io_dir);
         println!("Started PIO");
 
         (Shared {}, Local {}, init::Monotonics(mono))
