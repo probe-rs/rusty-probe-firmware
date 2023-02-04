@@ -4,6 +4,7 @@ use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use embedded_hal::adc::OneShot;
 use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::ToggleableOutputPin;
 use embedded_hal::PwmPin;
 use rp2040_hal::{
     clocks::init_clocks_and_plls,
@@ -23,7 +24,6 @@ use usb_device::class_prelude::UsbBusAllocator;
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
 pub type DapHandler = dap_rs::dap::Dap<'static, Context, Leds, Wait, Jtag, Swd, Swo>;
-pub type LedPin = Pin<Gpio29, PushPullOutput>;
 
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.
@@ -39,7 +39,7 @@ pub fn setup(
     delay: &'static mut MaybeUninit<Delay>,
 ) -> (
     Rp2040Monotonic,
-    LedPin,
+    BoardLeds,
     ProbeUsb,
     DapHandler,
     AdcReader,
@@ -170,7 +170,11 @@ pub fn setup(
 
     (
         mono,
-        led_blue,
+        BoardLeds {
+            red: led_red,
+            green: led_green,
+            blue: led_blue,
+        },
         probe_usb,
         dap_hander,
         adc,
@@ -179,9 +183,49 @@ pub fn setup(
     )
 }
 
+pub struct AllIOs {
+    pub io: Pin<Gpio10, PushPullOutput>,
+    pub ck: Pin<Gpio11, PushPullOutput>,
+    pub tdi: Pin<Gpio17, PushPullOutput>,
+    pub reset: Pin<Gpio9, PushPullOutput>,
+    pub vcp_rx: Pin<Gpio18, PushPullOutput>,
+    pub vcp_tx: Pin<Gpio19, PushPullOutput>,
+}
+
+pub struct BoardLeds {
+    pub red: Pin<Gpio27, PushPullOutput>,
+    pub green: Pin<Gpio28, PushPullOutput>,
+    pub blue: Pin<Gpio29, PushPullOutput>,
+}
+
+impl BoardLeds {
+    pub fn red(&mut self, level: bool) {
+        self.red.set_state(level.into()).ok();
+    }
+
+    pub fn toggle_red(&mut self) {
+        self.red.toggle().ok();
+    }
+
+    pub fn green(&mut self, level: bool) {
+        self.green.set_state(level.into()).ok();
+    }
+
+    pub fn toggle_green(&mut self) {
+        self.green.toggle().ok();
+    }
+
+    pub fn blue(&mut self, level: bool) {
+        self.blue.set_state(level.into()).ok();
+    }
+    pub fn toggle_blue(&mut self) {
+        self.blue.toggle().ok();
+    }
+}
+
 pub struct AdcReader {
-    pin: Pin<Gpio26, FloatingInput>,
-    adc: Adc,
+    pub pin: Pin<Gpio26, FloatingInput>,
+    pub adc: Adc,
 }
 
 impl AdcReader {

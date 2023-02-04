@@ -6,7 +6,6 @@ use pico_probe as _;
 #[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ, CLOCKS_IRQ])]
 mod app {
     use core::mem::MaybeUninit;
-    use defmt::*;
     use embedded_hal::adc::OneShot;
     use embedded_hal::digital::v2::ToggleableOutputPin;
     use pico_probe::setup::*;
@@ -83,7 +82,7 @@ mod app {
                     }
                 }
                 Request::Suspend => {
-                    info!("Got USB suspend command");
+                    defmt::info!("Got USB suspend command");
                     dap.suspend();
                 }
             }

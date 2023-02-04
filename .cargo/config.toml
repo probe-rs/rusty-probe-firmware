@@ -24,7 +24,7 @@ rustflags = [
 target = "thumbv6m-none-eabi"
 
 [env]
-DEFMT_LOG = "debug"
+DEFMT_LOG = "info"
 
 [alias]
 rrb = "run --release --bin"
