@@ -105,13 +105,15 @@ mod app {
 
         target_power.enable_vtgt();
         target_power.set_vtgt(3300);
+        target_power.enable_5v_key();
 
         cortex_m::asm::delay(1_000_000);
 
         // All directions to outputs
         let _dir_io = pins.gpio12.into_push_pull_output_in_state(PinState::High);
-        let _dir_ck = pins.gpio21.into_push_pull_output_in_state(PinState::High);
+        let _dir_ck = pins.gpio19.into_push_pull_output_in_state(PinState::High);
         let _dir_tdi = pins.gpio23.into_push_pull_output_in_state(PinState::High);
+        let _dir_tdo_swo = pins.gpio22.into_push_pull_output_in_state(PinState::High);
         let _dir_vcp_rx = pins.gpio25.into_push_pull_output_in_state(PinState::High);
         let _dir_vcp_tx = pins.gpio24.into_push_pull_output_in_state(PinState::High);
 
@@ -119,14 +121,16 @@ mod app {
         let io = pins.gpio10.into_push_pull_output_in_state(PinState::Low);
         let ck = pins.gpio11.into_push_pull_output_in_state(PinState::Low);
         let tdi = pins.gpio17.into_push_pull_output_in_state(PinState::Low);
+        let tdo_swo = pins.gpio16.into_push_pull_output_in_state(PinState::Low);
         let reset = pins.gpio9.into_push_pull_output_in_state(PinState::Low);
-        let vcp_rx = pins.gpio18.into_push_pull_output_in_state(PinState::Low);
-        let vcp_tx = pins.gpio19.into_push_pull_output_in_state(PinState::Low);
+        let vcp_rx = pins.gpio21.into_push_pull_output_in_state(PinState::Low);
+        let vcp_tx = pins.gpio20.into_push_pull_output_in_state(PinState::Low);
 
         let all_io = AllIOs {
             io,
             ck,
             tdi,
+            tdo_swo,
             reset,
             vcp_rx,
             vcp_tx,
@@ -162,14 +166,17 @@ mod app {
             cx.local.leds.red(true);
             Systick::delay(100.millis()).await;
             cx.local.leds.red(false);
+            Systick::delay(100.millis()).await;
 
             cx.local.leds.green(true);
             Systick::delay(100.millis()).await;
             cx.local.leds.green(false);
+            Systick::delay(100.millis()).await;
 
             cx.local.leds.blue(true);
             Systick::delay(100.millis()).await;
             cx.local.leds.blue(false);
+            Systick::delay(100.millis()).await;
         }
     }
 
@@ -201,6 +208,10 @@ mod app {
             io.tdi.set_high().ok();
             Systick::delay(10.millis()).await;
             io.tdi.set_low().ok();
+
+            io.tdo_swo.set_high().ok();
+            Systick::delay(10.millis()).await;
+            io.tdo_swo.set_low().ok();
 
             io.vcp_rx.set_high().ok();
             Systick::delay(10.millis()).await;

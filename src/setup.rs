@@ -131,14 +131,14 @@ pub fn setup(
     let mut io = pins.gpio10;
     let mut ck = pins.gpio11;
     let mut dir_io = pins.gpio12;
-    let mut dir_ck = pins.gpio21;
+    let mut dir_ck = pins.gpio19;
     let reset = pins.gpio9;
 
     let tdi = pins.gpio17;
     let dir_tdi = pins.gpio23;
 
-    let vcp_rx = pins.gpio18;
-    let vcp_tx = pins.gpio19;
+    let vcp_rx = pins.gpio21;
+    let vcp_tx = pins.gpio20;
     let dir_vcp_rx = pins.gpio25;
     let dir_vcp_tx = pins.gpio24;
 
@@ -187,9 +187,10 @@ pub struct AllIOs {
     pub io: Pin<Gpio10, PushPullOutput>,
     pub ck: Pin<Gpio11, PushPullOutput>,
     pub tdi: Pin<Gpio17, PushPullOutput>,
+    pub tdo_swo: Pin<Gpio16, PushPullOutput>,
     pub reset: Pin<Gpio9, PushPullOutput>,
-    pub vcp_rx: Pin<Gpio18, PushPullOutput>,
-    pub vcp_tx: Pin<Gpio19, PushPullOutput>,
+    pub vcp_rx: Pin<Gpio21, PushPullOutput>,
+    pub vcp_tx: Pin<Gpio20, PushPullOutput>,
 }
 
 pub struct BoardLeds {
@@ -200,7 +201,7 @@ pub struct BoardLeds {
 
 impl BoardLeds {
     pub fn red(&mut self, level: bool) {
-        self.red.set_state(level.into()).ok();
+        self.red.set_state((!level).into()).ok();
     }
 
     pub fn toggle_red(&mut self) {
@@ -208,7 +209,7 @@ impl BoardLeds {
     }
 
     pub fn green(&mut self, level: bool) {
-        self.green.set_state(level.into()).ok();
+        self.green.set_state((!level).into()).ok();
     }
 
     pub fn toggle_green(&mut self) {
@@ -216,7 +217,7 @@ impl BoardLeds {
     }
 
     pub fn blue(&mut self, level: bool) {
-        self.blue.set_state(level.into()).ok();
+        self.blue.set_state((!level).into()).ok();
     }
     pub fn toggle_blue(&mut self) {
         self.blue.toggle().ok();
