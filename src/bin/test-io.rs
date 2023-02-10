@@ -11,9 +11,9 @@ mod app {
     use pico_probe::setup::*;
     use rp2040_hal::gpio::PinState;
     use rp2040_hal::usb::UsbBus;
-    use rtic_monotonics::systick_monotonic::*;
     use usb_device::class_prelude::*;
 
+    use rtic_monotonics::systick::*;
     rtic_monotonics::make_systick_handler!();
 
     #[shared]

@@ -18,7 +18,7 @@ use rp2040_hal::{
     watchdog::Watchdog,
     Adc, Clock, Sio,
 };
-use rp2040_monotonic::Rp2040Monotonic;
+use rtic_monotonics::rp2040;
 use usb_device::class_prelude::UsbBusAllocator;
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
@@ -38,7 +38,6 @@ pub fn setup(
     usb_bus: &'static mut MaybeUninit<UsbBusAllocator<UsbBus>>,
     delay: &'static mut MaybeUninit<Delay>,
 ) -> (
-    Rp2040Monotonic,
     BoardLeds,
     ProbeUsb,
     DapHandler,
@@ -166,10 +165,9 @@ pub fn setup(
         delay,
     );
 
-    let mono = Rp2040Monotonic::new(pac.TIMER);
+    rp2040::Timer::start(pac.TIMER, &mut resets);
 
     (
-        mono,
         BoardLeds {
             red: led_red,
             green: led_green,
