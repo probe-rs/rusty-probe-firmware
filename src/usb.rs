@@ -1,6 +1,6 @@
-use dap_rs::usb::{dap_v1::CmsisDapV1, dap_v2::CmsisDapV2, Request};
+use dap_rs::usb::{dap_v1::CmsisDapV1, dap_v2::CmsisDapV2, winusb::MicrosoftDescriptors, Request};
 use defmt::*;
-use rp_pico::hal::usb::UsbBus;
+use rp2040_hal::usb::UsbBus;
 use usb_device::{class_prelude::*, prelude::*};
 use usbd_serial::SerialPort;
 
@@ -8,7 +8,7 @@ use usbd_serial::SerialPort;
 pub struct ProbeUsb {
     device: UsbDevice<'static, UsbBus>,
     device_state: UsbDeviceState,
-    // winusb: MicrosoftDescriptors,
+    winusb: MicrosoftDescriptors,
     dap_v1: CmsisDapV1<'static, UsbBus>,
     dap_v2: CmsisDapV2<'static, UsbBus>,
     serial: SerialPort<'static, UsbBus>,
@@ -18,15 +18,18 @@ pub struct ProbeUsb {
 impl ProbeUsb {
     #[inline(always)]
     pub fn new(usb_bus: &'static UsbBusAllocator<UsbBus>) -> Self {
+        let winusb = MicrosoftDescriptors;
+
         let dap_v1 = CmsisDapV1::new(64, usb_bus);
         let dap_v2 = CmsisDapV2::new(64, usb_bus);
         let serial = SerialPort::new(&usb_bus);
 
         let id = crate::device_signature::device_id_hex();
         info!("Device ID: {}", id);
+
         let device = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0x4853))
             .manufacturer("Probe-rs development team")
-            .product("Pico-Probe with CMSIS-DAP v1/v2 Support")
+            .product("Rusty-Probe with CMSIS-DAP v1/v2 Support")
             .serial_number(id)
             .device_class(0)
             .max_packet_size_0(64)
@@ -37,6 +40,7 @@ impl ProbeUsb {
         ProbeUsb {
             device,
             device_state,
+            winusb,
             dap_v1,
             dap_v2,
             serial,
@@ -45,7 +49,7 @@ impl ProbeUsb {
 
     pub fn interrupt(&mut self) -> Option<Request> {
         if self.device.poll(&mut [
-            // &mut usb.winusb,
+            &mut self.winusb,
             &mut self.dap_v1,
             &mut self.dap_v2,
             &mut self.serial,

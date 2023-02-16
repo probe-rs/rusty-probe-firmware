@@ -3,17 +3,15 @@
 
 use pico_probe as _;
 
-#[rtic::app(device = rp_pico::hal::pac, dispatchers = [XIP_IRQ])]
+#[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ])]
 mod app {
     use defmt::*;
-    use rp2040_monotonic::*;
-    use rp_pico::{
-        hal::{clocks::init_clocks_and_plls, gpio::Pins, watchdog::Watchdog, Sio},
-        XOSC_CRYSTAL_FREQ,
-    };
+    use rp2040_hal::{clocks::init_clocks_and_plls, gpio::Pins, watchdog::Watchdog, Sio};
 
-    #[monotonic(binds = TIMER_IRQ_0, default = true)]
-    type Monotonic = Rp2040Monotonic;
+    use rtic_monotonics::rp2040::Timer;
+    rtic_monotonics::make_rp2040_monotonic_handler!();
+
+    const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
     #[shared]
     struct Shared {}
@@ -22,7 +20,7 @@ mod app {
     struct Local {}
 
     #[init]
-    fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
+    fn init(cx: init::Context) -> (Shared, Local) {
         let mut resets = cx.device.RESETS;
         let mut watchdog = Watchdog::new(cx.device.WATCHDOG);
         let _clocks = defmt::unwrap!(init_clocks_and_plls(
@@ -36,7 +34,7 @@ mod app {
         )
         .ok());
 
-        let mono = Rp2040Monotonic::new(cx.device.TIMER);
+        Timer::start(cx.device.TIMER, &mut resets);
 
         let sio = Sio::new(cx.device.SIO);
         let pins = Pins::new(
@@ -47,13 +45,14 @@ mod app {
         );
 
         //  let led = pins.gpio25.into_push_pull_output();
-        let io = pins.gpio14;
-        let ck = pins.gpio15;
+        let io = pins.gpio10;
+        let io_dir = pins.gpio12;
+        let ck = pins.gpio11;
 
         println!("Starting PIO");
-        pico_probe::pio::setup_pio(&mut resets, cx.device.PIO0, ck, io);
+        pico_probe::pio::setup_pio(&mut resets, cx.device.PIO0, ck, io, io_dir);
         println!("Started PIO");
 
-        (Shared {}, Local {}, init::Monotonics(mono))
+        (Shared {}, Local {})
     }
 }

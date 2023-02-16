@@ -10,6 +10,7 @@
 ; - IRQ 0 is the done flag, needs clearing to start
 ; - assumes autopull with size 8 is used
 ; - assumes all pins are outputs
+; - assumes that the SWDIO DIR signal is correctly set
 ;
 ; Usage:
 ;
