@@ -793,7 +793,7 @@ dependencies = [
 [[package]]
 name = "rtic"
 version = "2.0.0-alpha.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#6c73c3452a1924c713973b2262d4b09838426e02"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#32b537aef63a2f69c5abc83b0af3fd88205ce0ce"
 dependencies = [
  "atomic-polyfill",
  "bare-metal 1.0.0",
@@ -806,7 +806,7 @@ dependencies = [
 [[package]]
 name = "rtic-common"
 version = "1.0.0-alpha.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#6c73c3452a1924c713973b2262d4b09838426e02"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#32b537aef63a2f69c5abc83b0af3fd88205ce0ce"
 dependencies = [
  "critical-section",
 ]
@@ -820,7 +820,7 @@ checksum = "d9369355b04d06a3780ec0f51ea2d225624db777acbc60abd8ca4832da5c1a42"
 [[package]]
 name = "rtic-macros"
 version = "2.0.0-alpha.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#6c73c3452a1924c713973b2262d4b09838426e02"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#32b537aef63a2f69c5abc83b0af3fd88205ce0ce"
 dependencies = [
  "indexmap",
  "proc-macro-error",
@@ -832,10 +832,11 @@ dependencies = [
 [[package]]
 name = "rtic-monotonics"
 version = "1.0.0-alpha.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#6c73c3452a1924c713973b2262d4b09838426e02"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#32b537aef63a2f69c5abc83b0af3fd88205ce0ce"
 dependencies = [
  "atomic-polyfill",
  "cfg-if",
+ "cortex-m",
  "fugit",
  "rp2040-pac",
  "rtic-time",
@@ -844,7 +845,7 @@ dependencies = [
 [[package]]
 name = "rtic-time"
 version = "1.0.0-alpha.0"
-source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#6c73c3452a1924c713973b2262d4b09838426e02"
+source = "git+https://github.com/rtic-rs/cortex-m-rtic.git?branch=rticv2#32b537aef63a2f69c5abc83b0af3fd88205ce0ce"
 dependencies = [
  "critical-section",
  "futures-util",
