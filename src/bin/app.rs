@@ -21,7 +21,9 @@ mod app {
         probe_usb: pico_probe::usb::ProbeUsb,
         dap_handler: DapHandler,
         leds: BoardLeds,
-        adc: AdcReader,
+        target_vcc: TargetVccReader,
+        translator_power: TranslatorPower,
+        target_power: TargetPower,
     }
 
     #[init(local = [
@@ -29,10 +31,10 @@ mod app {
         delay: MaybeUninit<pico_probe::systick_delay::Delay> = MaybeUninit::uninit(),
     ])]
     fn init(cx: init::Context) -> (Shared, Local) {
-        let (leds, probe_usb, dap_handler, adc, translator_power, target_power) =
+        let (leds, probe_usb, dap_handler, target_vcc, translator_power, target_power) =
             setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
 
-        led_blinker::spawn().ok();
+        voltage_translator_control::spawn().ok();
 
         (
             Shared {},
@@ -40,23 +42,41 @@ mod app {
                 probe_usb,
                 dap_handler,
                 leds,
-                adc,
+                target_vcc,
+                translator_power,
+                target_power,
             },
         )
     }
 
-    #[task(local = [leds, adc])]
-    async fn led_blinker(cx: led_blinker::Context) {
+    #[task(priority = 3, local = [leds, target_vcc, translator_power, target_power])]
+    async fn voltage_translator_control(cx: voltage_translator_control::Context) {
         loop {
-            cx.local.leds.toggle_green();
-            let val = cx.local.adc.voltage();
-            defmt::info!("Vtgt = {} mV", val);
+            // Set the voltage translators to track Target's VCC
+            let target_vcc_mv = cx.local.target_vcc.read_voltage_mv();
+            cx.local.translator_power.set_translator_vcc(target_vcc_mv);
 
-            Timer::delay(1000.millis()).await;
+            defmt::debug!("Tracking Target VCC at {} mV", target_vcc_mv);
+
+            if target_vcc_mv > 2500 {
+                cx.local.leds.green(true);
+                cx.local.leds.red(false);
+                cx.local.leds.blue(false);
+            } else if target_vcc_mv > 1500 {
+                cx.local.leds.green(false);
+                cx.local.leds.red(true);
+                cx.local.leds.blue(false);
+            } else {
+                cx.local.leds.green(false);
+                cx.local.leds.red(false);
+                cx.local.leds.blue(true);
+            }
+
+            Timer::delay(100.millis()).await;
         }
     }
 
-    #[task(binds = USBCTRL_IRQ, local = [probe_usb, dap_handler, resp_buf: [u8; 64] = [0; 64]])]
+    #[task(binds = USBCTRL_IRQ, priority = 2, local = [probe_usb, dap_handler, resp_buf: [u8; 64] = [0; 64]])]
     fn on_usb(ctx: on_usb::Context) {
         let probe_usb = ctx.local.probe_usb;
         let dap = ctx.local.dap_handler;

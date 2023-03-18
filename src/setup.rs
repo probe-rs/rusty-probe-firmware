@@ -41,7 +41,7 @@ pub fn setup(
     BoardLeds,
     ProbeUsb,
     DapHandler,
-    AdcReader,
+    TargetVccReader,
     TranslatorPower,
     TargetPower,
 ) {
@@ -74,10 +74,10 @@ pub fn setup(
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
 
-    let mut led_red = pins.gpio27.into_push_pull_output();
-    led_red.set_high().ok();
-    let mut led_green = pins.gpio28.into_push_pull_output();
+    let mut led_green = pins.gpio27.into_push_pull_output();
     led_green.set_high().ok();
+    let mut led_red = pins.gpio28.into_push_pull_output();
+    led_red.set_high().ok();
     let mut led_blue = pins.gpio29.into_push_pull_output();
     led_blue.set_high().ok();
 
@@ -90,7 +90,7 @@ pub fn setup(
     // Configure GPIO26 as an ADC input
     let adc_pin_0 = pins.gpio26.into_floating_input();
 
-    let adc = AdcReader {
+    let adc = TargetVccReader {
         pin: adc_pin_0,
         adc,
     };
@@ -105,7 +105,7 @@ pub fn setup(
 
     let mut translator_power = TranslatorPower::new(pins.gpio5.into_push_pull_output(), pwm);
 
-    translator_power.set_vtranslator(3300);
+    translator_power.set_translator_vcc(1800);
 
     ///////////////////////////////////
     // Target power
@@ -122,8 +122,8 @@ pub fn setup(
         pwm,
     );
 
-    target_power.enable_vtgt();
-    target_power.set_vtgt(3300);
+    // target_power.enable_vtgt();
+    target_power.set_vtgt(1800);
 
     cortex_m::asm::delay(1_000_000);
 
@@ -193,8 +193,8 @@ pub struct AllIOs {
 }
 
 pub struct BoardLeds {
-    pub red: Pin<Gpio27, PushPullOutput>,
-    pub green: Pin<Gpio28, PushPullOutput>,
+    pub green: Pin<Gpio27, PushPullOutput>,
+    pub red: Pin<Gpio28, PushPullOutput>,
     pub blue: Pin<Gpio29, PushPullOutput>,
 }
 
@@ -223,13 +223,13 @@ impl BoardLeds {
     }
 }
 
-pub struct AdcReader {
+pub struct TargetVccReader {
     pub pin: Pin<Gpio26, FloatingInput>,
     pub adc: Adc,
 }
 
-impl AdcReader {
-    pub fn voltage(&mut self) -> u32 {
+impl TargetVccReader {
+    pub fn read_voltage_mv(&mut self) -> u32 {
         let Self { pin, adc } = self;
         let val: u16 = adc.read(pin).unwrap();
 
@@ -261,7 +261,7 @@ impl TranslatorPower {
         Self { vtranslator_pwm }
     }
 
-    pub fn set_vtranslator(&mut self, mv: u32) {
+    pub fn set_translator_vcc(&mut self, mv: u32) {
         // ans = 0.0900 * 4095
         let v33 = 369; // duty cycle that give 3.3v
 
