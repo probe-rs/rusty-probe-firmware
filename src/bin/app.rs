@@ -12,7 +12,6 @@ mod app {
     use usb_device::class_prelude::*;
 
     use rtic_monotonics::rp2040::{ExtU64, Timer};
-    rtic_monotonics::make_rp2040_monotonic_handler!();
 
     #[shared]
     struct Shared {}

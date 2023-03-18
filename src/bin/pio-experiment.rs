@@ -7,9 +7,7 @@ use pico_probe as _;
 mod app {
     use defmt::*;
     use rp2040_hal::{clocks::init_clocks_and_plls, gpio::Pins, watchdog::Watchdog, Sio};
-
-    use rtic_monotonics::rp2040::Timer;
-    rtic_monotonics::make_rp2040_monotonic_handler!();
+    use rtic_monotonics::systick::*;
 
     const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
@@ -34,7 +32,8 @@ mod app {
         )
         .ok());
 
-        Timer::start(cx.device.TIMER, &mut resets);
+        let systick_token = rtic_monotonics::make_systick_handler!();
+        Systick::start(cx.core.SYST, 125_000_000, systick_token);
 
         let sio = Sio::new(cx.device.SIO);
         let pins = Pins::new(

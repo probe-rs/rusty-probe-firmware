@@ -14,7 +14,6 @@ mod app {
     use usb_device::class_prelude::*;
 
     use rtic_monotonics::systick::*;
-    rtic_monotonics::make_systick_handler!();
 
     #[shared]
     struct Shared {}
@@ -142,7 +141,8 @@ mod app {
             blue: led_blue,
         };
 
-        Systick::start(cx.core.SYST, 125_000_000);
+        let systick_token = rtic_monotonics::make_systick_handler!();
+        Systick::start(cx.core.SYST, 125_000_000, systick_token);
 
         led_test::spawn().ok();
         adc_test::spawn().ok();

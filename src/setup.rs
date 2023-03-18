@@ -165,7 +165,8 @@ pub fn setup(
         delay,
     );
 
-    rp2040::Timer::start(pac.TIMER, &mut resets);
+    let timer_token = rtic_monotonics::make_rp2040_monotonic_handler!();
+    rp2040::Timer::start(pac.TIMER, &mut resets, timer_token);
 
     (
         BoardLeds {
