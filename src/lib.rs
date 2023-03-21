@@ -1,8 +1,13 @@
 #![no_std]
 
 use core::sync::atomic::{AtomicUsize, Ordering};
-use defmt_rtt as _;
 use panic_probe as _;
+
+#[cfg(feature = "defmt-rtt")]
+use defmt_rtt as _;
+
+#[cfg(feature = "defmt-bbq")]
+use defmt_bbq as _;
 
 pub mod dap;
 pub mod device_signature;

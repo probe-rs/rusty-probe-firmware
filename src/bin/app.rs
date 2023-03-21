@@ -14,11 +14,12 @@ mod app {
     use rtic_monotonics::rp2040::{ExtU64, Timer};
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        probe_usb: pico_probe::usb::ProbeUsb,
+    }
 
     #[local]
     struct Local {
-        probe_usb: pico_probe::usb::ProbeUsb,
         dap_handler: DapHandler,
         leds: BoardLeds,
         target_vcc: TargetVccReader,
@@ -36,10 +37,12 @@ mod app {
 
         voltage_translator_control::spawn().ok();
 
+        #[cfg(feature = "defmt-bbq")]
+        log_pump::spawn().ok();
+
         (
-            Shared {},
+            Shared { probe_usb },
             Local {
-                probe_usb,
                 dap_handler,
                 leds,
                 target_vcc,
@@ -76,35 +79,47 @@ mod app {
         }
     }
 
-    #[task(binds = USBCTRL_IRQ, priority = 2, local = [probe_usb, dap_handler, resp_buf: [u8; 64] = [0; 64]])]
+    #[task(shared = [probe_usb])]
+    async fn log_pump(mut ctx: log_pump::Context) {
+        loop {
+            ctx.shared
+                .probe_usb
+                .lock(|probe_usb| probe_usb.flush_logs());
+            Timer::delay(100.millis()).await;
+        }
+    }
+
+    #[task(binds = USBCTRL_IRQ, priority = 2, shared = [ probe_usb ], local = [dap_handler, resp_buf: [u8; 64] = [0; 64]])]
     fn on_usb(ctx: on_usb::Context) {
-        let probe_usb = ctx.local.probe_usb;
+        let mut probe_usb = ctx.shared.probe_usb;
         let dap = ctx.local.dap_handler;
         let resp_buf = ctx.local.resp_buf;
 
-        if let Some(request) = probe_usb.interrupt() {
-            use dap_rs::{dap::DapVersion, usb::Request};
+        probe_usb.lock(|probe_usb| {
+            if let Some(request) = probe_usb.interrupt() {
+                use dap_rs::{dap::DapVersion, usb::Request};
 
-            match request {
-                Request::DAP1Command((report, n)) => {
-                    let len = dap.process_command(&report[..n], resp_buf, DapVersion::V1);
+                match request {
+                    Request::DAP1Command((report, n)) => {
+                        let len = dap.process_command(&report[..n], resp_buf, DapVersion::V1);
 
-                    if len > 0 {
-                        probe_usb.dap1_reply(&resp_buf[..len]);
+                        if len > 0 {
+                            probe_usb.dap1_reply(&resp_buf[..len]);
+                        }
                     }
-                }
-                Request::DAP2Command((report, n)) => {
-                    let len = dap.process_command(&report[..n], resp_buf, DapVersion::V2);
+                    Request::DAP2Command((report, n)) => {
+                        let len = dap.process_command(&report[..n], resp_buf, DapVersion::V2);
 
-                    if len > 0 {
-                        probe_usb.dap2_reply(&resp_buf[..len]);
+                        if len > 0 {
+                            probe_usb.dap2_reply(&resp_buf[..len]);
+                        }
                     }
-                }
-                Request::Suspend => {
-                    defmt::info!("Got USB suspend command");
-                    dap.suspend();
+                    Request::Suspend => {
+                        defmt::info!("Got USB suspend command");
+                        dap.suspend();
+                    }
                 }
             }
-        }
+        });
     }
 }

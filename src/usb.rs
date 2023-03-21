@@ -12,12 +12,17 @@ pub struct ProbeUsb {
     dap_v1: CmsisDapV1<'static, UsbBus>,
     dap_v2: CmsisDapV2<'static, UsbBus>,
     serial: SerialPort<'static, UsbBus>,
-    // dfu: DfuRuntime,
+
+    #[cfg(feature = "defmt-bbq")]
+    defmt_consumer: defmt_bbq::DefmtConsumer,
 }
 
 impl ProbeUsb {
     #[inline(always)]
-    pub fn new(usb_bus: &'static UsbBusAllocator<UsbBus>) -> Self {
+    pub fn new(
+        usb_bus: &'static UsbBusAllocator<UsbBus>,
+        #[cfg(feature = "defmt-bbq")] defmt_consumer: defmt_bbq::DefmtConsumer,
+    ) -> Self {
         let winusb = MicrosoftDescriptors;
 
         let dap_v1 = CmsisDapV1::new(64, usb_bus);
@@ -35,6 +40,7 @@ impl ProbeUsb {
             .max_packet_size_0(64)
             .max_power(500)
             .build();
+
         let device_state = device.state();
 
         ProbeUsb {
@@ -44,23 +50,45 @@ impl ProbeUsb {
             dap_v1,
             dap_v2,
             serial,
+            #[cfg(feature = "defmt-bbq")]
+            defmt_consumer,
+        }
+    }
+
+    pub fn flush_logs(&mut self) {
+        #[cfg(feature = "defmt-bbq")]
+        {
+            if let Ok(grant) = self.defmt_consumer.read() {
+                let bytes_written = if let Ok(bytes_written) = self.serial.write(&grant) {
+                    bytes_written
+                } else {
+                    0
+                };
+                grant.release(bytes_written);
+            }
         }
     }
 
     pub fn interrupt(&mut self) -> Option<Request> {
+        self.flush_logs();
+
         if self.device.poll(&mut [
             &mut self.winusb,
             &mut self.dap_v1,
             &mut self.dap_v2,
             &mut self.serial,
-            // &mut usb.dfu,
         ]) {
             let old_state = self.device_state;
             let new_state = self.device.state();
             self.device_state = new_state;
+
             if (old_state != new_state) && (new_state != UsbDeviceState::Configured) {
                 return Some(Request::Suspend);
             }
+
+            // Discard data from the serial interface
+            let mut buf = [0; 64 as usize];
+            let _ = self.serial.read(&mut buf);
 
             let r = self.dap_v1.process();
             if r.is_some() {
@@ -71,10 +99,6 @@ impl ProbeUsb {
             if r.is_some() {
                 return r;
             }
-
-            // Discard data from the serial interface
-            let mut buf = [0; 64 as usize];
-            let _ = self.serial.read(&mut buf);
         }
         None
     }

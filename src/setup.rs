@@ -69,7 +69,14 @@ pub fn setup(
         &mut resets,
     )));
 
-    let probe_usb = ProbeUsb::new(&usb_bus);
+    #[cfg(feature = "defmt-bbq")]
+    let consumer = defmt_bbq::init().ok().unwrap();
+
+    let probe_usb = ProbeUsb::new(
+        &usb_bus,
+        #[cfg(feature = "defmt-bbq")]
+        consumer,
+    );
 
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
