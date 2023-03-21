@@ -10,7 +10,6 @@ cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 rtic = { git = "https://github.com/rtic-rs/rtic.git", branch = "master", features= ["thumbv6-backend"] }
 rtic-monotonics = { git = "https://github.com/rtic-rs/rtic.git", branch = "master", features = ["rp2040", "cortex-m-systick"] }
 defmt = { version = "0.3.2", features = ["encoding-rzcobs"] }
-defmt-rtt = "0.4.0"
 embedded-hal = { version = "0.2.5", features = ["unproven"] }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
 replace_with = { version = "0.1.7", default-features = false, features = ["panic_abort"] }
@@ -24,6 +23,16 @@ pio = "0.2.1"
 # If you're not going to use a Board Support Package you'll need these:
 rp2040-hal = { version = "0.7.0", features = ["rt"] }
 rp2040-boot2 = "0.2.1"
+
+defmt-rtt = { version = "0.4.0", optional = true }
+defmt-bbq = { version = "0.1.0", optional = true }
+# We don't need bbqueue directly, but we need to activate the
+# thumbv6 feature on it so it will compile.
+bbqueue = { version = "0.5", features = ["thumbv6"], optional = true }
+
+[features]
+default = [ "defmt-rtt" ]
+defmt-bbq = ["dep:defmt-bbq", "dep:bbqueue"]
 
 # cargo build/run
 [profile.dev]

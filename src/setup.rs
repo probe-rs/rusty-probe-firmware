@@ -69,7 +69,14 @@ pub fn setup(
         &mut resets,
     )));
 
-    let probe_usb = ProbeUsb::new(&usb_bus);
+    #[cfg(feature = "defmt-bbq")]
+    let consumer = defmt_bbq::init().ok().unwrap();
+
+    let probe_usb = ProbeUsb::new(
+        &usb_bus,
+        #[cfg(feature = "defmt-bbq")]
+        consumer,
+    );
 
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
@@ -133,13 +140,13 @@ pub fn setup(
     let mut dir_ck = pins.gpio19;
     let reset = pins.gpio9;
 
-    let tdi = pins.gpio17;
-    let dir_tdi = pins.gpio23;
+    let _tdi = pins.gpio17;
+    let _dir_tdi = pins.gpio23;
 
-    let vcp_rx = pins.gpio21;
-    let vcp_tx = pins.gpio20;
-    let dir_vcp_rx = pins.gpio25;
-    let dir_vcp_tx = pins.gpio24;
+    let _vcp_rx = pins.gpio21;
+    let _vcp_tx = pins.gpio20;
+    let _dir_vcp_rx = pins.gpio25;
+    let _dir_vcp_tx = pins.gpio24;
 
     // High speed IO
     io.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
@@ -220,6 +227,12 @@ impl BoardLeds {
     }
     pub fn toggle_blue(&mut self) {
         self.blue.toggle().ok();
+    }
+
+    pub fn rgb(&mut self, r: bool, g: bool, b: bool) {
+        self.red(r);
+        self.green(g);
+        self.blue(b);
     }
 }
 
