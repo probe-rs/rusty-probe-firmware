@@ -140,13 +140,13 @@ pub fn setup(
     let mut dir_ck = pins.gpio19;
     let reset = pins.gpio9;
 
-    let tdi = pins.gpio17;
-    let dir_tdi = pins.gpio23;
+    let _tdi = pins.gpio17;
+    let _dir_tdi = pins.gpio23;
 
-    let vcp_rx = pins.gpio21;
-    let vcp_tx = pins.gpio20;
-    let dir_vcp_rx = pins.gpio25;
-    let dir_vcp_tx = pins.gpio24;
+    let _vcp_rx = pins.gpio21;
+    let _vcp_tx = pins.gpio20;
+    let _dir_vcp_rx = pins.gpio25;
+    let _dir_vcp_tx = pins.gpio24;
 
     // High speed IO
     io.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
