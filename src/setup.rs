@@ -228,6 +228,12 @@ impl BoardLeds {
     pub fn toggle_blue(&mut self) {
         self.blue.toggle().ok();
     }
+
+    pub fn rgb(&mut self, r: bool, g: bool, b: bool) {
+        self.red(r);
+        self.green(g);
+        self.blue(b);
+    }
 }
 
 pub struct TargetVccReader {

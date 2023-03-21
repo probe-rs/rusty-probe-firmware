@@ -61,19 +61,15 @@ mod app {
 
             defmt::debug!("Tracking Target VCC at {} mV", target_vcc_mv);
 
-            if target_vcc_mv > 2500 {
-                cx.local.leds.green(true);
-                cx.local.leds.red(false);
-                cx.local.leds.blue(false);
+            let (r, g, b) = if target_vcc_mv > 2500 {
+                (false, true, false)
             } else if target_vcc_mv > 1500 {
-                cx.local.leds.green(false);
-                cx.local.leds.red(true);
-                cx.local.leds.blue(false);
+                (true, false, false)
             } else {
-                cx.local.leds.green(false);
-                cx.local.leds.red(false);
-                cx.local.leds.blue(true);
-            }
+                (false, false, true)
+            };
+
+            cx.local.leds.rgb(r, g, b);
 
             Timer::delay(100.millis()).await;
         }
