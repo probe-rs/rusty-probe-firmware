@@ -1,10 +1,10 @@
 use crate::dap::{Context, Jtag, Leds, Swd, Swo, Wait};
+use crate::leds::BoardLeds;
 use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use embedded_hal::adc::OneShot;
 use embedded_hal::digital::v2::OutputPin;
-use embedded_hal::digital::v2::ToggleableOutputPin;
 use embedded_hal::PwmPin;
 use rp2040_hal::{
     clocks::init_clocks_and_plls,
@@ -188,11 +188,7 @@ pub fn setup(
     rp2040::Timer::start(pac.TIMER, &mut resets, timer_token);
 
     (
-        BoardLeds {
-            red: led_red,
-            green: led_green,
-            blue: led_blue,
-        },
+        BoardLeds::new(led_red, led_green, led_blue),
         probe_usb,
         dap_hander,
         adc,
@@ -209,43 +205,6 @@ pub struct AllIOs {
     pub reset: Pin<Gpio9, PushPullOutput>,
     pub vcp_rx: Pin<Gpio21, PushPullOutput>,
     pub vcp_tx: Pin<Gpio20, PushPullOutput>,
-}
-
-pub struct BoardLeds {
-    pub green: Pin<Gpio27, PushPullOutput>,
-    pub red: Pin<Gpio28, PushPullOutput>,
-    pub blue: Pin<Gpio29, PushPullOutput>,
-}
-
-impl BoardLeds {
-    pub fn red(&mut self, level: bool) {
-        self.red.set_state((!level).into()).ok();
-    }
-
-    pub fn toggle_red(&mut self) {
-        self.red.toggle().ok();
-    }
-
-    pub fn green(&mut self, level: bool) {
-        self.green.set_state((!level).into()).ok();
-    }
-
-    pub fn toggle_green(&mut self) {
-        self.green.toggle().ok();
-    }
-
-    pub fn blue(&mut self, level: bool) {
-        self.blue.set_state((!level).into()).ok();
-    }
-    pub fn toggle_blue(&mut self) {
-        self.blue.toggle().ok();
-    }
-
-    pub fn rgb(&mut self, r: bool, g: bool, b: bool) {
-        self.red(r);
-        self.green(g);
-        self.blue(b);
-    }
 }
 
 pub struct TargetVccReader {
