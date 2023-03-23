@@ -1,5 +1,5 @@
-use crate::dap::{Context, Jtag, Leds, Swd, Swo, Wait};
-use crate::leds::BoardLeds;
+use crate::dap::{Context, Jtag, Swd, Swo, Wait};
+use crate::leds::{BoardLeds, HostStatusToken, LedManager};
 use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
@@ -24,7 +24,7 @@ use usb_device::class_prelude::UsbBusAllocator;
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
-pub type DapHandler = dap_rs::dap::Dap<'static, Context, Leds, Wait, Jtag, Swd, Swo>;
+pub type DapHandler = dap_rs::dap::Dap<'static, Context, HostStatusToken, Wait, Jtag, Swd, Swo>;
 
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.
@@ -39,7 +39,7 @@ pub fn setup(
     usb_bus: &'static mut MaybeUninit<UsbBusAllocator<UsbBus>>,
     delay: &'static mut MaybeUninit<Delay>,
 ) -> (
-    BoardLeds,
+    LedManager,
     ProbeUsb,
     DapHandler,
     TargetVccReader,
@@ -173,6 +173,10 @@ pub fn setup(
     let git_version: &'static str = git_version::git_version!();
     let delay = delay.write(Delay::new(core.SYST, clocks.system_clock.freq().raw()));
 
+    let board_leds = BoardLeds::new(led_red, led_green, led_blue);
+    let mut led_manager = LedManager::new(board_leds);
+    let host_status_token = led_manager.host_status_token().unwrap();
+
     let dap_hander = dap::create_dap(
         git_version,
         io.into(),
@@ -182,13 +186,14 @@ pub fn setup(
         dir_ck.into(),
         clocks.system_clock.freq().raw(),
         delay,
+        host_status_token,
     );
 
     let timer_token = rtic_monotonics::create_rp2040_monotonic_token!();
     rp2040::Timer::start(pac.TIMER, &mut resets, timer_token);
 
     (
-        BoardLeds::new(led_red, led_green, led_blue),
+        led_manager,
         probe_usb,
         dap_hander,
         adc,

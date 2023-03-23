@@ -207,15 +207,6 @@ impl swj::Dependencies<Swd, Jtag> for Context {
     }
 }
 
-#[derive(Debug, defmt::Format)]
-pub struct Leds {}
-
-impl dap::DapLeds for Leds {
-    fn react_to_host_status(&mut self, _host_status: dap::HostStatus) {
-        trace!("Running LEDs react to host status");
-    }
-}
-
 pub struct Jtag(Context);
 
 impl From<Jtag> for Context {
@@ -522,6 +513,7 @@ pub fn create_dap(
     dir_swclk: DynPin,
     cpu_frequency: u32,
     delay: &'static Delay,
+    leds: crate::leds::HostStatusToken,
 ) -> crate::setup::DapHandler {
     let context = Context::from_pins(
         swdio,
@@ -532,7 +524,6 @@ pub fn create_dap(
         cpu_frequency,
         delay,
     );
-    let leds = Leds {};
     let wait = Wait::new(delay);
     let swo = None;
 

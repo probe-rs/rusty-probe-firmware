@@ -7,7 +7,10 @@ use pico_probe as _;
 #[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ, CLOCKS_IRQ])]
 mod app {
     use core::mem::MaybeUninit;
-    use pico_probe::{leds::BoardLeds, setup::*};
+    use pico_probe::{
+        leds::{LedManager, Vtarget},
+        setup::*,
+    };
     use rp2040_hal::usb::UsbBus;
     use usb_device::class_prelude::*;
 
@@ -21,7 +24,6 @@ mod app {
     #[local]
     struct Local {
         dap_handler: DapHandler,
-        leds: BoardLeds,
         target_vcc: TargetVccReader,
         translator_power: TranslatorPower,
         target_power: TargetPower,
@@ -40,11 +42,12 @@ mod app {
         #[cfg(feature = "defmt-bbq")]
         log_pump::spawn().ok();
 
+        led_driver::spawn(leds).ok();
+
         (
             Shared { probe_usb },
             Local {
                 dap_handler,
-                leds,
                 target_vcc,
                 translator_power,
                 target_power,
@@ -52,24 +55,27 @@ mod app {
         )
     }
 
-    #[task(priority = 3, local = [leds, target_vcc, translator_power, target_power])]
+    #[task]
+    async fn led_driver(_: led_driver::Context, mut leds: LedManager) {
+        leds.run().await;
+    }
+
+    #[task(priority = 3, local = [ target_vcc, translator_power, target_power])]
     async fn voltage_translator_control(cx: voltage_translator_control::Context) {
         loop {
             // Set the voltage translators to track Target's VCC
             let target_vcc_mv = cx.local.target_vcc.read_voltage_mv();
             cx.local.translator_power.set_translator_vcc(target_vcc_mv);
 
-            defmt::debug!("Tracking Target VCC at {} mV", target_vcc_mv);
+            defmt::trace!("Tracking Target VCC at {} mV", target_vcc_mv);
 
-            let (r, g, b) = if target_vcc_mv > 2500 {
-                (false, true, false)
+            if target_vcc_mv > 2500 {
+                LedManager::set_current_vtarget(Some(Vtarget::Voltage3V3));
             } else if target_vcc_mv > 1500 {
-                (true, false, false)
+                LedManager::set_current_vtarget(Some(Vtarget::Voltage1V8));
             } else {
-                (false, false, true)
+                LedManager::set_current_vtarget(None);
             };
-
-            cx.local.leds.rgb(r, g, b);
 
             Timer::delay(100.millis()).await;
         }
