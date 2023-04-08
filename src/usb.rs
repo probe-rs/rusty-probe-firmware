@@ -88,9 +88,10 @@ impl ProbeUsb {
 
             // Discard data from the serial interface
             let mut buf = [0; 64 as usize];
-            let read_data = self.serial.read(&mut buf);
+            let _read_data = self.serial.read(&mut buf);
 
-            if let Ok(read_data) = read_data {
+            #[cfg(feature = "usb-serial-reboot")]
+            if let Ok(read_data) = _read_data {
                 if &buf[..read_data] == &0xDEAD_BEEFu32.to_be_bytes() {
                     rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
                 }

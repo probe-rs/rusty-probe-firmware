@@ -32,6 +32,7 @@ bbqueue = { version = "0.5", features = ["thumbv6"], optional = true }
 [features]
 default = [ "defmt-brtt/rtt" ]
 defmt-bbq = ["defmt-brtt/bbq", "dep:bbqueue"]
+usb-serial-reboot = []
 
 # cargo build/run
 [profile.dev]
