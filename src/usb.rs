@@ -58,20 +58,20 @@ impl ProbeUsb {
     pub fn flush_logs(&mut self) {
         #[cfg(feature = "defmt-bbq")]
         {
-            if let Ok(grant) = self.defmt_consumer.read() {
-                let bytes_written = if let Ok(bytes_written) = self.serial.write(&grant) {
-                    bytes_written
-                } else {
-                    0
-                };
-                grant.release(bytes_written);
+            if self.device.state() == UsbDeviceState::Configured {
+                if let Ok(grant) = self.defmt_consumer.read() {
+                    let bytes_written = if let Ok(bytes_written) = self.serial.write(&grant) {
+                        bytes_written
+                    } else {
+                        0
+                    };
+                    grant.release(bytes_written);
+                }
             }
         }
     }
 
     pub fn interrupt(&mut self) -> Option<Request> {
-        self.flush_logs();
-
         if self.device.poll(&mut [
             &mut self.winusb,
             &mut self.dap_v1,
