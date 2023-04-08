@@ -30,4 +30,6 @@ while [ ! -e "$serial" ]; do
     :
 done
 
+echo "Attaching..."
+
 sudo stty -F "$serial" raw 115200 && sudo cat "$serial" | defmt-print --show-skipped-frames -e "$file"

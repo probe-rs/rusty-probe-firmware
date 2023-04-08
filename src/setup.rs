@@ -14,6 +14,7 @@ use rp2040_hal::{
     },
     pac,
     pwm::{self, FreeRunning, Pwm0, Pwm2, Slice},
+    rom_data,
     usb::UsbBus,
     watchdog::Watchdog,
     Adc, Clock, Sio,
@@ -71,6 +72,17 @@ pub fn setup(
 
     #[cfg(feature = "defmt-bbq")]
     let consumer = defmt_brtt::init().ok().unwrap();
+
+    let rom_version = rom_data::rom_version_number();
+    let git_revision = rom_data::git_revision();
+    let copyright = rom_data::copyright_string();
+
+    defmt::info!(
+        "RP2040-B{=u8} (ROM {=u32:x}) {=str}",
+        rom_version,
+        git_revision,
+        copyright
+    );
 
     let probe_usb = ProbeUsb::new(
         &usb_bus,
