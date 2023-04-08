@@ -20,4 +20,6 @@ elf2uf2-rs -d "$file"
 
 sleep 2
 
+echo "Attaching to serial"
+
 sudo stty -F "$serial" raw 115200 && sudo cat "$serial" | defmt-print --show-skipped-frames -e "$file"
