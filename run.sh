@@ -2,6 +2,8 @@
 
 set -e
 
+# To use a different serial port name, set the `LOG_SERIAL` environment
+# variable to the filename that you expect your serial port to have.
 serial=${LOG_SERIAL-"/dev/ttyACM0"}
 file=${1-"./target/thumbv6m-none-eabi/release/app"}
 
