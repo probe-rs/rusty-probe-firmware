@@ -6,7 +6,7 @@ serial=${LOG_SERIAL-"/dev/ttyACM0"}
 file=${1-"./target/thumbv6m-none-eabi/release/app"}
 
 check_exists() {
-    if [ ! -f "$(which $1)" ]; then
+    if [ ! -f "$(which $1 2> /dev/null)" ]; then
         echo "Could not find $1. Please install it. (probably \`cargo install \"$1\"\`)"
         exit 1
     fi
