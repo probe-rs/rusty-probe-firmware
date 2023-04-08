@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 serial=${LOG_SERIAL-"/dev/ttyACM0"}
 file=${1-"./target/thumbv6m-none-eabi/release/app"}
 
