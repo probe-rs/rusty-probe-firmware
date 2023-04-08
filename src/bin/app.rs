@@ -8,7 +8,7 @@ use pico_probe as _;
 mod app {
     use core::mem::MaybeUninit;
     use pico_probe::setup::*;
-    use rp2040_hal::usb::UsbBus;
+    use rp2040_hal::{rom_data, usb::UsbBus};
     use usb_device::class_prelude::*;
 
     use rtic_monotonics::rp2040::{ExtU64, Timer};
@@ -34,6 +34,17 @@ mod app {
     fn init(cx: init::Context) -> (Shared, Local) {
         let (leds, probe_usb, dap_handler, target_vcc, translator_power, target_power) =
             setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
+
+        let rom_version = rom_data::rom_version_number();
+        let git_revision = rom_data::git_revision();
+        let copyright = rom_data::copyright_string();
+
+        defmt::info!(
+            "RP2040-B{=u8} (ROM {=u32:x}) {=str}",
+            rom_version,
+            git_revision,
+            copyright
+        );
 
         voltage_translator_control::spawn().ok();
 
