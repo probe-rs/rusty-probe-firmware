@@ -175,7 +175,7 @@ pub fn setup(
 
     let board_leds = BoardLeds::new(led_red, led_green, led_blue);
     let mut led_manager = LedManager::new(board_leds);
-    let host_status_token = led_manager.host_status_token().unwrap();
+    let host_status_token = led_manager.host_status_token();
 
     let dap_hander = dap::create_dap(
         git_version,

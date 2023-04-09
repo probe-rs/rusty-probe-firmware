@@ -92,31 +92,22 @@ pub enum Vtarget {
     Voltage3V3,
 }
 
+use core::sync::atomic::{AtomicU8, Ordering};
 use core::task::Poll;
-use core::{
-    marker::PhantomData,
-    sync::atomic::{AtomicU8, Ordering},
-};
 use rtic_common::waker_registration::CriticalSectionWakerRegistration;
 
-pub struct HostStatusToken {
-    // To make sure no one else can construct it
-    _field: PhantomData<()>,
-}
+/// A token that can be used to update the DAP Host
+/// status.
+#[derive(Debug, Clone, Copy)]
+pub struct HostStatusToken;
 
 pub struct LedManager {
     leds: BoardLeds,
-    dap_leds: Option<HostStatusToken>,
 }
 
 impl LedManager {
     pub fn new(leds: BoardLeds) -> Self {
-        Self {
-            leds,
-            dap_leds: Some(HostStatusToken {
-                _field: Default::default(),
-            }),
-        }
+        Self { leds }
     }
 
     fn vtarget_storage() -> &'static AtomicU8 {
@@ -165,8 +156,8 @@ impl LedManager {
         Self::waker().wake();
     }
 
-    pub fn host_status_token(&mut self) -> Option<HostStatusToken> {
-        self.dap_leds.take()
+    pub fn host_status_token(&mut self) -> HostStatusToken {
+        HostStatusToken
     }
 
     pub fn current_vtarget() -> Option<Vtarget> {
