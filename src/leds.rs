@@ -6,6 +6,7 @@ pub struct BoardLeds {
     green: Pin<Gpio27, PushPullOutput>,
     red: Pin<Gpio28, PushPullOutput>,
     blue: Pin<Gpio29, PushPullOutput>,
+    rgb: (bool, bool, bool),
 }
 
 impl BoardLeds {
@@ -14,7 +15,12 @@ impl BoardLeds {
         green: Pin<Gpio27, PushPullOutput>,
         blue: Pin<Gpio29, PushPullOutput>,
     ) -> Self {
-        let mut me = Self { red, green, blue };
+        let mut me = Self {
+            red,
+            green,
+            blue,
+            rgb: (false, false, false),
+        };
         me.rgb(false, false, false);
         me
     }
@@ -31,7 +37,12 @@ impl BoardLeds {
         self.blue.set_state((!level).into()).ok();
     }
 
+    pub fn state(&self) -> (bool, bool, bool) {
+        self.rgb
+    }
+
     pub fn rgb(&mut self, r: bool, g: bool, b: bool) {
+        self.rgb = (r, g, b);
         self.set_red(r);
         self.set_green(g);
         self.set_blue(b);
@@ -222,7 +233,7 @@ impl LedManager {
         is_activity
     }
 
-    pub async fn update(&mut self) {
+    async fn update(&mut self) {
         let is_activity = self.set();
         if is_activity {
             // Wait for a little bit so the status can actually be seen.
@@ -239,6 +250,7 @@ impl LedManager {
             // Set the LEDs to whatever the current state is.
             self.set();
 
+            // Wait for an update to occur
             core::future::poll_fn(|ctx| {
                 if !polled {
                     polled = true;
