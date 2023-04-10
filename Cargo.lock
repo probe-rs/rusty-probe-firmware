@@ -653,6 +653,7 @@ dependencies = [
  "defmt",
  "defmt-brtt",
  "embedded-hal",
+ "futures-util",
  "git-version",
  "panic-probe",
  "pio",

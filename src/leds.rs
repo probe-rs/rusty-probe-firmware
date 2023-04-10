@@ -251,38 +251,56 @@ impl LedManager {
     async fn update(&mut self) {
         let is_activity = self.set();
         if is_activity {
-            // Wait for a little bit so the status can actually be seen.
+            use futures_util::{future::select, pin_mut};
+
+            // Wait for a little bit so the status can actually be seen, unless
+            // it changes to another non-idle state.
             use rtic_monotonics::rp2040::{ExtU64, Timer};
 
-            Timer::delay(50.millis()).await;
+            let wait_for_nonactive_status = async {
+                loop {
+                    self.wait_for_change().await;
+                    if Self::current_host_status() != Some(HostStatus::Connected(false)) {
+                        break;
+                    }
+                }
+            };
+            pin_mut!(wait_for_nonactive_status);
+
+            let timeout = Timer::delay(50.millis());
+            pin_mut!(timeout);
+
+            select(wait_for_nonactive_status, timeout).await;
         }
+    }
+
+    async fn wait_for_change(&mut self) {
+        let current_vtarget = Self::current_vtarget();
+        let current_host_status = Self::current_host_status();
+
+        // Wait for an update to occur
+        core::future::poll_fn(|ctx| {
+            Self::waker().register(ctx.waker());
+
+            let new_vtarget = Self::current_vtarget();
+            let new_host_status = Self::current_host_status();
+
+            if new_vtarget != current_vtarget {
+                Poll::Ready(())
+            } else if new_host_status != current_host_status {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
     }
 
     pub async fn run(&mut self) -> ! {
         loop {
             // Set the LEDs to whatever the current state is.
             self.set();
-
-            let current_vtarget = Self::current_vtarget();
-            let current_host_status = Self::current_host_status();
-
-            // Wait for an update to occur
-            core::future::poll_fn(|ctx| {
-                Self::waker().register(ctx.waker());
-
-                let new_vtarget = Self::current_vtarget();
-                let new_host_status = Self::current_host_status();
-
-                if new_vtarget != current_vtarget {
-                    Poll::Ready(())
-                } else if new_host_status != current_host_status {
-                    Poll::Ready(())
-                } else {
-                    Poll::Pending
-                }
-            })
-            .await;
-
+            self.wait_for_change().await;
             self.update().await;
         }
     }
