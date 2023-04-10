@@ -1,4 +1,5 @@
 use core::marker::PhantomData;
+use core::num::NonZeroU8;
 use core::sync::atomic::{AtomicU8, Ordering};
 use core::task::Poll;
 
@@ -19,6 +20,32 @@ impl From<dap_rs::dap::HostStatus> for HostStatus {
             dap_rs::dap::HostStatus::Connected(c) => Self::Connected(c),
             dap_rs::dap::HostStatus::Running(c) => Self::Running(c),
         }
+    }
+}
+
+impl From<HostStatus> for NonZeroU8 {
+    fn from(value: HostStatus) -> Self {
+        let val = match value {
+            HostStatus::Connected(false) => 1,
+            HostStatus::Connected(true) => 2,
+            HostStatus::Running(false) => 3,
+            HostStatus::Running(true) => 4,
+        };
+        unsafe { NonZeroU8::new_unchecked(val) }
+    }
+}
+
+impl TryFrom<u8> for HostStatus {
+    type Error = ();
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        let value = match value {
+            1 => HostStatus::Connected(false),
+            2 => HostStatus::Connected(true),
+            3 => HostStatus::Running(false),
+            4 => HostStatus::Running(true),
+            _ => return Err(()),
+        };
+        Ok(value)
     }
 }
 
@@ -139,30 +166,14 @@ impl LedManager {
     fn current_host_status() -> Option<HostStatus> {
         let value = Self::host_status_storage().load(Ordering::Relaxed);
 
-        if value == 1 {
-            Some(HostStatus::Connected(false))
-        } else if value == 2 {
-            Some(HostStatus::Connected(true))
-        } else if value == 3 {
-            Some(HostStatus::Running(false))
-        } else if value == 4 {
-            Some(HostStatus::Running(true))
-        } else {
-            None
-        }
+        HostStatus::try_from(value).ok()
     }
 
     pub fn set_host_status(host_status: dap_rs::dap::HostStatus) {
         let host_status: HostStatus = host_status.into();
+        let value: NonZeroU8 = host_status.into();
 
-        let value = match host_status {
-            HostStatus::Connected(false) => 1,
-            HostStatus::Connected(true) => 2,
-            HostStatus::Running(false) => 3,
-            HostStatus::Running(true) => 4,
-        };
-
-        Self::host_status_storage().store(value, Ordering::Relaxed);
+        Self::host_status_storage().store(value.get(), Ordering::Relaxed);
 
         defmt::debug!("Host status is now {}", host_status);
 
