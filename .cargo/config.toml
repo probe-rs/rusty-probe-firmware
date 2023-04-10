@@ -6,7 +6,7 @@
 # runner = "probe-run --chip RP2040 --probe dc6168968f3b812eef4014"
 # runner = "probe-run --chip RP2040 --probe dc61cd078f667031ef4014"
 # runner = "elf2uf2-rs -d"
-runner = "./run.sh"
+runner = "cargo xtask-x86-linux debug --defmt-print"
 
 rustflags = [
   "-C", "linker=flip-link",
@@ -31,3 +31,5 @@ DEFMT_LOG = "info"
 [alias]
 rrb = "run --release --bin"
 brb = "build --release --bin"
+xtask = "run --release --manifest-path xtask/Cargo.toml --target"
+xtask-x86-linux = "xtask x86_64-unknown-linux-gnu --"
