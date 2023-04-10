@@ -92,7 +92,7 @@ impl ProbeUsb {
 
             #[cfg(feature = "usb-serial-reboot")]
             if let Ok(read_data) = _read_data {
-                if &buf[..read_data] == &0xDEAD_BEEFu32.to_be_bytes() {
+                if &buf[..read_data] == &0xDABAD000u32.to_be_bytes() {
                     rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
                 }
             }
