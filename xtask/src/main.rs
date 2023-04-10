@@ -1,5 +1,6 @@
 use std::{
     io::Write,
+    process::Stdio,
     time::{Duration, Instant},
 };
 
@@ -36,19 +37,32 @@ pub enum Command {
     },
 
     /// Read log data from the Rusty Probe, and print the
-    /// data to `stdout`. The output data can be pumped into
-    /// a tool like [`defmt-print`]
-    ///
-    /// [`defmt-print`]: https://crates.io/crates/defmt-print
-    ReadLog,
+    /// data to `stdout` or into `defmt-print`
+    ReadLog {
+        /// If set, this value is used as path to the ELF that `defmt-print`
+        /// is started with, and the log sent into `defmt-print`.
+        #[clap(short, long, env = "XTASK_DEFMT_PRINT")]
+        defmt_elf_path: Option<String>,
+
+        /// Increase `defmt-print`'s verbosity
+        #[clap(short, env = "XTASK_DEFMT_VERBOSE")]
+        verbose: bool,
+    },
 
     /// Reboot the Rusty Probe into the USB bootloader, flash
     /// a firmware ELF, wait for it to restart, and write log data
-    /// to `stdout`
+    /// to `stdout` or into `defmt-print`.
     #[clap(alias = "reboot-flash-readlog")]
     Debug {
         /// Path to the ELF file to be flashed
         elf: String,
+        /// If set, `defmt-print` is started and the log data
+        /// is sent into it.
+        #[clap(short, long, env = "XTASK_DEFMT_PRINT")]
+        defmt_print: bool,
+        /// Increase `defmt-print`'s verbosity
+        #[clap(short, env = "XTASK_DEFMT_VERBOSE")]
+        verbose: bool,
     },
 }
 
@@ -60,7 +74,7 @@ pub struct Cli {
         target_os = "linux",
         clap(short, long, default_value = "/dev/ttyACM0", global = true)
     )]
-    #[clap(short, long, global = true)]
+    #[clap(short, long, global = true, env = "XTASK_SERIAL")]
     serial_port: String,
 
     /// How long we should wait for the rp2040's USB filesystem
@@ -78,28 +92,64 @@ fn reboot(serial_port: &mut Box<dyn SerialPort>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn read_log(serial_port: &mut Box<dyn SerialPort>) -> anyhow::Result<()> {
-    let mut stdout = std::io::stdout();
-    let mut buf = [0u8; 2048];
+fn read_log(
+    port: &mut Box<dyn SerialPort>,
+    defmt_print: Option<(String, bool)>,
+) -> anyhow::Result<()> {
+    let buf = &mut [0u8; 2048];
 
-    loop {
-        let data = match serial_port.read(&mut buf) {
-            Ok(data) => data,
+    fn read_data<'a>(
+        port: &mut Box<dyn SerialPort>,
+        buffer: &'a mut [u8],
+    ) -> anyhow::Result<&'a [u8]> {
+        match port.read(buffer) {
+            Ok(data) => Ok(&buffer[..data]),
             Err(e) => {
                 if e.kind() != std::io::ErrorKind::TimedOut {
-                    break Err(e.into());
+                    Err(anyhow::anyhow!(e))
                 } else {
-                    continue;
+                    Ok(&buffer[..0])
                 }
             }
-        };
-
-        stdout.write_all(&buf[..data])?;
-        stdout.flush()?;
+        }
     }
+
+    if let Some((elf, verbose)) = defmt_print {
+        eprintln!("Starting defmt-print");
+
+        // Don't use `xtask` here because we want to access stdin of
+        // the child process.
+        let mut command = std::process::Command::new("defmt-print");
+
+        if verbose {
+            command.arg("--show-skipped-frames");
+        }
+
+        let mut child = command
+            .args(["-e".to_owned(), format!("{elf}")])
+            .stdin(Stdio::piped())
+            .spawn()
+            .map_err(|e| anyhow::anyhow!("Starting `defmt-print` failed: {e}"))?;
+
+        let mut stdin = child.stdin.take().unwrap();
+
+        loop {
+            let data: &[u8] = read_data(port, buf)?;
+            stdin.write_all(data)?;
+            stdin.flush()?;
+        }
+    } else {
+        let mut stdout = std::io::stdout();
+
+        loop {
+            let data = read_data(port, buf)?;
+            stdout.write_all(data)?;
+            stdout.flush()?;
+        }
+    };
 }
 
-fn flash(elf: String, timeout_ms: u64) -> anyhow::Result<()> {
+fn flash(elf: &str, timeout_ms: u64) -> anyhow::Result<()> {
     if let Err(e) = std::fs::File::open(&elf) {
         return Err(anyhow::anyhow!("Could not open ELF file: {e}"));
     }
@@ -154,7 +204,7 @@ fn main() -> anyhow::Result<()> {
             }
             Err(e) => Err(e),
         },
-        Command::Flash { elf } => flash(elf, opts.timeout),
+        Command::Flash { elf } => flash(&elf, opts.timeout),
         Command::RebootAndFlash { elf } => {
             if let Ok(mut port) = serial_port() {
                 reboot(&mut port)?;
@@ -164,13 +214,20 @@ fn main() -> anyhow::Result<()> {
                 );
             };
 
-            flash(elf, opts.timeout)
+            flash(&elf, opts.timeout)
         }
-        Command::ReadLog => {
+        Command::ReadLog {
+            defmt_elf_path,
+            verbose,
+        } => {
             let mut serial_port = serial_port()?;
-            read_log(&mut serial_port)
+            read_log(&mut serial_port, defmt_elf_path.map(|p| (p, verbose)))
         }
-        Command::Debug { elf } => {
+        Command::Debug {
+            elf,
+            defmt_print,
+            verbose,
+        } => {
             if let Ok(mut port) = serial_port() {
                 reboot(&mut port)?;
             } else {
@@ -179,7 +236,9 @@ fn main() -> anyhow::Result<()> {
                 );
             };
 
-            flash(elf, opts.timeout)?;
+            flash(&elf, opts.timeout)?;
+
+            let defmt_print = if defmt_print { Some(elf) } else { None };
 
             let start = Instant::now();
             loop {
@@ -193,7 +252,7 @@ fn main() -> anyhow::Result<()> {
                     //
                     // Not entirely certain that this really helps, but ¯\_(ツ)_/¯
                     std::thread::sleep(Duration::from_millis(200));
-                    break read_log(&mut port);
+                    break read_log(&mut port, defmt_print.map(|p| (p, verbose)));
                 }
             }
         }
