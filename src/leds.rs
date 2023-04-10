@@ -139,6 +139,20 @@ pub enum Vtarget {
     Voltage3V3,
 }
 
+/// A struct that manages the onboard LEDs
+///
+/// Current color scheme:
+/// * Host not connected
+///     * No Vtarget detected: Red
+///     * 1.8V Vtarget detected: Pink
+///     * 3.3V Vtarget detected: White
+/// * Host Connected: Yellow
+/// * Not running: blue
+/// * Running: green
+///
+/// After each state change a short delay is introduced to ensure that
+/// the color can be noticed, unless it updates to a new state other than
+/// Host not connected.
 pub struct LedManager {
     leds: BoardLeds,
 }
