@@ -1,6 +1,11 @@
+use core::marker::PhantomData;
+use core::sync::atomic::{AtomicU8, Ordering};
+use core::task::Poll;
+
 use dap_rs::dap::DapLeds;
 use embedded_hal::digital::v2::OutputPin;
 use rp2040_hal::gpio::{bank0::*, Pin, PushPullOutput};
+use rtic_common::waker_registration::CriticalSectionWakerRegistration;
 
 #[derive(Debug, Clone, Copy, PartialEq, defmt::Format)]
 enum HostStatus {
@@ -106,11 +111,6 @@ pub enum Vtarget {
     Voltage1V8,
     Voltage3V3,
 }
-
-use core::marker::PhantomData;
-use core::sync::atomic::{AtomicU8, Ordering};
-use core::task::Poll;
-use rtic_common::waker_registration::CriticalSectionWakerRegistration;
 
 pub struct LedManager {
     leds: BoardLeds,
@@ -258,6 +258,7 @@ impl LedManager {
             // Wait for an update to occur
             core::future::poll_fn(|ctx| {
                 Self::waker().register(ctx.waker());
+
                 let new_vtarget = Self::current_vtarget();
                 let new_host_status = Self::current_host_status();
 
