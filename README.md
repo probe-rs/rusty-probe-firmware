@@ -23,8 +23,7 @@ Start the Pico in bootloader mode and drop the `app.uf2` file to it, done!
 
 If you don't have a debugger/programmer to program or debug your rusty-probe with, you can still run the probe and see the defmt logs it prints.
 
-To do so, start the probe with the bootloader enabled by powering it on while holding
-the button pressed. Mount the resulting block device.
+To do so, start the probe in the USB bootloader by powering it on while holding the button pressed. Mount the resulting block device.
 
 Then, perform the following steps:
 
@@ -32,16 +31,14 @@ Then, perform the following steps:
 # Install elf2uf2-rs and defmt-print (you only need to do this once)
 cargo install elf2uf2-rs defmt-print
 
-# Build the ELF file with the desired level of logging and the
-# correct defmt transport.
-DEFMT_LOG=debug cargo build --release --bin app  \
-        --no-default-features                    \
-        --features defmt-bbq
-
-# Flash the ELF, attach to the serial port, and print the defmt logs
-elf2uf2-rs -s -d target/thumbv6m-none-eabi/release/app \
-    | defmt-print -e ./target/thumbv6m-none-eabi/release/app
+# Build the binary with the desired level of logging, and run
+# it using `xtask`
+XTASK_SERIAL=/dev/ttyACM0 DEFMT_LOG=debug cargo rrb-usb app
 ```
+
+You can now repeat the above command, which will automatically restart and flash your Rusty Probe. Note that this does require that the block device is mounted each time.
+
+You may have to change `XTASK_SERIAL`, and on non-x86 linux platforms, you must update the runner configuration with the correct target (see [`.cargo/config.toml`](.cargo/config.toml#L15)).
 
 ## TODO
 

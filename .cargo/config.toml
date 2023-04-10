@@ -4,8 +4,15 @@
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 # runner = "probe-run --chip RP2040 --probe 3c004b001051383439393134"
 # runner = "probe-run --chip RP2040 --probe dc6168968f3b812eef4014"
-runner = "probe-run --chip RP2040 --probe dc61cd078f667031ef4014"
+# runner = "probe-run --chip RP2040 --probe dc61cd078f667031ef4014"
 # runner = "elf2uf2-rs -d"
+
+# This runner allows you to log & restart the Rusty Probe using
+# nothing but a USB connection.
+#
+# The target in this runner is the _host_ compilation target
+# You may have to change it
+runner = "cargo xtask --target x86_64-unknown-linux-gnu debug --defmt-print"
 
 rustflags = [
   "-C", "linker=flip-link",
@@ -30,3 +37,6 @@ DEFMT_LOG = "info"
 [alias]
 rrb = "run --release --bin"
 brb = "build --release --bin"
+rrb-usb = "run --release --no-default-features --features defmt-bbq,usb-serial-reboot --bin"
+run-usb = "rrb-usb app"
+xtask = "run --release --manifest-path xtask/Cargo.toml"

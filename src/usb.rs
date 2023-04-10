@@ -58,20 +58,20 @@ impl ProbeUsb {
     pub fn flush_logs(&mut self) {
         #[cfg(feature = "defmt-bbq")]
         {
-            if let Ok(grant) = self.defmt_consumer.read() {
-                let bytes_written = if let Ok(bytes_written) = self.serial.write(&grant) {
-                    bytes_written
-                } else {
-                    0
-                };
-                grant.release(bytes_written);
+            if self.device.state() == UsbDeviceState::Configured {
+                if let Ok(grant) = self.defmt_consumer.read() {
+                    let bytes_written = if let Ok(bytes_written) = self.serial.write(&grant) {
+                        bytes_written
+                    } else {
+                        0
+                    };
+                    grant.release(bytes_written);
+                }
             }
         }
     }
 
     pub fn interrupt(&mut self) -> Option<Request> {
-        self.flush_logs();
-
         if self.device.poll(&mut [
             &mut self.winusb,
             &mut self.dap_v1,
@@ -88,7 +88,14 @@ impl ProbeUsb {
 
             // Discard data from the serial interface
             let mut buf = [0; 64 as usize];
-            let _ = self.serial.read(&mut buf);
+            let _read_data = self.serial.read(&mut buf);
+
+            #[cfg(feature = "usb-serial-reboot")]
+            if let Ok(read_data) = _read_data {
+                if &buf[..read_data] == &0xDABAD000u32.to_be_bytes() {
+                    rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
+                }
+            }
 
             let r = self.dap_v1.process();
             if r.is_some() {
