@@ -198,17 +198,17 @@ impl LedManager {
             (Some(current_vtarget), None)
             | (Some(current_vtarget), Some(HostStatus::Connected(false))) => {
                 match current_vtarget {
-                    Vtarget::Voltage1V8 => self.leds.yellow(),
+                    Vtarget::Voltage1V8 => self.leds.pink(),
                     Vtarget::Voltage3V3 => self.leds.white(),
                 }
                 false
             }
             (_, Some(HostStatus::Connected(true))) => {
-                self.leds.blue();
+                self.leds.yellow();
                 true
             }
             (_, Some(HostStatus::Running(false))) => {
-                self.leds.light_blue();
+                self.leds.blue();
                 true
             }
             (_, Some(HostStatus::Running(true))) => {
