@@ -32,7 +32,7 @@ mod app {
         )
         .ok());
 
-        let systick_token = rtic_monotonics::make_systick_handler!();
+        let systick_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, 125_000_000, systick_token);
 
         let sio = Sio::new(cx.device.SIO);

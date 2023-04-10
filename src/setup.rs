@@ -70,7 +70,7 @@ pub fn setup(
     )));
 
     #[cfg(feature = "defmt-bbq")]
-    let consumer = defmt_bbq::init().ok().unwrap();
+    let consumer = defmt_brtt::init().ok().unwrap();
 
     let probe_usb = ProbeUsb::new(
         &usb_bus,
@@ -172,7 +172,7 @@ pub fn setup(
         delay,
     );
 
-    let timer_token = rtic_monotonics::make_rp2040_monotonic_handler!();
+    let timer_token = rtic_monotonics::create_rp2040_monotonic_token!();
     rp2040::Timer::start(pac.TIMER, &mut resets, timer_token);
 
     (

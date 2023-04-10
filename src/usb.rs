@@ -14,14 +14,14 @@ pub struct ProbeUsb {
     serial: SerialPort<'static, UsbBus>,
 
     #[cfg(feature = "defmt-bbq")]
-    defmt_consumer: defmt_bbq::DefmtConsumer,
+    defmt_consumer: defmt_brtt::DefmtConsumer,
 }
 
 impl ProbeUsb {
     #[inline(always)]
     pub fn new(
         usb_bus: &'static UsbBusAllocator<UsbBus>,
-        #[cfg(feature = "defmt-bbq")] defmt_consumer: defmt_bbq::DefmtConsumer,
+        #[cfg(feature = "defmt-bbq")] defmt_consumer: defmt_brtt::DefmtConsumer,
     ) -> Self {
         let winusb = MicrosoftDescriptors;
 

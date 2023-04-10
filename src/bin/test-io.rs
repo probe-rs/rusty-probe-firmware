@@ -141,7 +141,7 @@ mod app {
             blue: led_blue,
         };
 
-        let systick_token = rtic_monotonics::make_systick_handler!();
+        let systick_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, 125_000_000, systick_token);
 
         led_test::spawn().ok();
