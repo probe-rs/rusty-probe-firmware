@@ -24,15 +24,14 @@ pio = "0.2.1"
 rp2040-hal = { version = "0.7.0", features = ["rt"] }
 rp2040-boot2 = "0.2.1"
 
-defmt-rtt = { version = "0.4.0", optional = true }
-defmt-bbq = { version = "0.1.0", optional = true }
+defmt-brtt = { version = "0.1.0", default-features = false }
 # We don't need bbqueue directly, but we need to activate the
 # thumbv6 feature on it so it will compile.
 bbqueue = { version = "0.5", features = ["thumbv6"], optional = true }
 
 [features]
-default = [ "defmt-rtt" ]
-defmt-bbq = ["dep:defmt-bbq", "dep:bbqueue"]
+default = [ "defmt-brtt/rtt" ]
+defmt-bbq = ["defmt-brtt/bbq", "dep:bbqueue"]
 
 # cargo build/run
 [profile.dev]

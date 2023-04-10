@@ -2,11 +2,7 @@
 
 use panic_probe as _;
 
-#[cfg(feature = "defmt-rtt")]
-use defmt_rtt as _;
-
-#[cfg(feature = "defmt-bbq")]
-use defmt_bbq as _;
+use defmt_brtt as _;
 
 use rp2040_hal::timer::Instant;
 use rtic_monotonics::{rp2040::Timer, Monotonic};

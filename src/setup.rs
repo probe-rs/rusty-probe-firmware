@@ -70,7 +70,7 @@ pub fn setup(
     )));
 
     #[cfg(feature = "defmt-bbq")]
-    let consumer = defmt_bbq::init().ok().unwrap();
+    let consumer = defmt_brtt::init().ok().unwrap();
 
     let probe_usb = ProbeUsb::new(
         &usb_bus,

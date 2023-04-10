@@ -238,13 +238,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "defmt-bbq"
-version = "0.1.0"
+name = "defmt-brtt"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c937dfd3aa385c0ceb497b513f23f9dea75c884dc12ac18cae2ccb7675c7a327"
+checksum = "c2f0ac3635d0c89d12b8101fcb44a7625f5f030a1c0491124b74467eb5a58a78"
 dependencies = [
  "bbqueue",
- "cortex-m 0.7.7",
+ "critical-section",
  "defmt",
 ]
 
@@ -266,16 +266,6 @@ name = "defmt-parser"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0db23d29972d99baa3de2ee2ae3f104c10564a6d05a346eb3f4c4f2c0525a06e"
-
-[[package]]
-name = "defmt-rtt"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "609923761264dd99ed9c7d209718cda4631c5fe84668e0f0960124cbb844c49f"
-dependencies = [
- "critical-section",
- "defmt",
-]
 
 [[package]]
 name = "diff"
@@ -652,8 +642,7 @@ dependencies = [
  "cortex-m 0.7.7",
  "dap-rs",
  "defmt",
- "defmt-bbq",
- "defmt-rtt",
+ "defmt-brtt",
  "embedded-hal",
  "git-version",
  "panic-probe",
