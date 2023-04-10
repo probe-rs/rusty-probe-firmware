@@ -1,6 +1,21 @@
-use dap_rs::dap::{DapLeds, HostStatus};
+use dap_rs::dap::DapLeds;
 use embedded_hal::digital::v2::OutputPin;
 use rp2040_hal::gpio::{bank0::*, Pin, PushPullOutput};
+
+#[derive(Debug, Clone, Copy, PartialEq, defmt::Format)]
+enum HostStatus {
+    Connected(bool),
+    Running(bool),
+}
+
+impl From<dap_rs::dap::HostStatus> for HostStatus {
+    fn from(value: dap_rs::dap::HostStatus) -> Self {
+        match value {
+            dap_rs::dap::HostStatus::Connected(c) => Self::Connected(c),
+            dap_rs::dap::HostStatus::Running(c) => Self::Running(c),
+        }
+    }
+}
 
 pub struct BoardLeds {
     green: Pin<Gpio27, PushPullOutput>,
@@ -141,7 +156,9 @@ impl LedManager {
         }
     }
 
-    pub fn set_host_status(host_status: HostStatus) {
+    pub fn set_host_status(host_status: dap_rs::dap::HostStatus) {
+        let host_status: HostStatus = host_status.into();
+
         let value = match host_status {
             HostStatus::Connected(false) => 1,
             HostStatus::Connected(true) => 2,
@@ -181,13 +198,9 @@ impl LedManager {
             0
         };
 
-        let current_vtarget = Self::current_vtarget();
         Self::vtarget_storage().store(new_value, Ordering::Relaxed);
 
-        // If Vtarget has changed, we may want to make a change to the LEDs
-        if current_vtarget != vtarget {
-            Self::waker().wake();
-        }
+        Self::waker().wake();
     }
 
     fn set(&mut self) -> bool {
@@ -236,19 +249,24 @@ impl LedManager {
 
     pub async fn run(&mut self) -> ! {
         loop {
-            let mut polled = false;
-
             // Set the LEDs to whatever the current state is.
             self.set();
 
+            let current_vtarget = Self::current_vtarget();
+            let current_host_status = Self::current_host_status();
+
             // Wait for an update to occur
             core::future::poll_fn(|ctx| {
-                if !polled {
-                    polled = true;
-                    Self::waker().register(ctx.waker());
-                    Poll::Pending
-                } else {
+                Self::waker().register(ctx.waker());
+                let new_vtarget = Self::current_vtarget();
+                let new_host_status = Self::current_host_status();
+
+                if new_vtarget != current_vtarget {
                     Poll::Ready(())
+                } else if new_host_status != current_host_status {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
                 }
             })
             .await;
@@ -259,7 +277,7 @@ impl LedManager {
 }
 
 impl DapLeds for HostStatusToken {
-    fn react_to_host_status(&mut self, host_status: HostStatus) {
+    fn react_to_host_status(&mut self, host_status: dap_rs::dap::HostStatus) {
         LedManager::set_host_status(host_status);
     }
 }
