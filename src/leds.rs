@@ -273,22 +273,27 @@ impl LedManager {
 
             let wait_for_nonactive_status = async {
                 loop {
-                    self.wait_for_change().await;
-                    if Self::current_host_status() != Some(HostStatus::Connected(false)) {
+                    let (new_status, _) = self.wait_for_change().await;
+                    if new_status != Some(HostStatus::Connected(false))
+                        && new_status != Some(HostStatus::Running(false))
+                    {
                         break;
                     }
                 }
             };
             pin_mut!(wait_for_nonactive_status);
 
-            let timeout = Timer::delay(50.millis());
+            let timeout = Timer::delay(100.millis());
             pin_mut!(timeout);
 
             select(wait_for_nonactive_status, timeout).await;
+        } else {
+            let _ = self.wait_for_change().await;
         }
     }
 
-    async fn wait_for_change(&mut self) {
+    #[must_use]
+    async fn wait_for_change(&mut self) -> (Option<HostStatus>, Option<Vtarget>) {
         let current_vtarget = Self::current_vtarget();
         let current_host_status = Self::current_host_status();
 
@@ -300,21 +305,19 @@ impl LedManager {
             let new_host_status = Self::current_host_status();
 
             if new_vtarget != current_vtarget {
-                Poll::Ready(())
+                Poll::Ready((new_host_status, new_vtarget))
             } else if new_host_status != current_host_status {
-                Poll::Ready(())
+                Poll::Ready((new_host_status, new_vtarget))
             } else {
                 Poll::Pending
             }
         })
-        .await;
+        .await
     }
 
     pub async fn run(&mut self) -> ! {
         loop {
             // Set the LEDs to whatever the current state is.
-            self.set();
-            self.wait_for_change().await;
             self.update().await;
         }
     }
