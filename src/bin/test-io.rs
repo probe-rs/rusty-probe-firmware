@@ -8,6 +8,7 @@ use pico_probe as _;
 mod app {
     use core::mem::MaybeUninit;
     use embedded_hal::digital::v2::OutputPin;
+    use pico_probe::leds::BoardLeds;
     use pico_probe::setup::*;
     use rp2040_hal::gpio::PinState;
     use rp2040_hal::usb::UsbBus;
@@ -163,19 +164,19 @@ mod app {
     #[task(local = [leds])]
     async fn led_test(cx: led_test::Context) {
         loop {
-            cx.local.leds.red(true);
+            cx.local.leds.set_red(true);
             Systick::delay(100.millis()).await;
-            cx.local.leds.red(false);
-            Systick::delay(100.millis()).await;
-
-            cx.local.leds.green(true);
-            Systick::delay(100.millis()).await;
-            cx.local.leds.green(false);
+            cx.local.leds.set_red(false);
             Systick::delay(100.millis()).await;
 
-            cx.local.leds.blue(true);
+            cx.local.leds.set_green(true);
             Systick::delay(100.millis()).await;
-            cx.local.leds.blue(false);
+            cx.local.leds.set_green(false);
+            Systick::delay(100.millis()).await;
+
+            cx.local.leds.set_blue(true);
+            Systick::delay(100.millis()).await;
+            cx.local.leds.set_blue(false);
             Systick::delay(100.millis()).await;
         }
     }
