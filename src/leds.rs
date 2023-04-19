@@ -35,17 +35,15 @@ impl From<HostStatus> for NonZeroU8 {
     }
 }
 
-impl TryFrom<u8> for HostStatus {
-    type Error = ();
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        let value = match value {
+impl From<NonZeroU8> for HostStatus {
+    fn from(value: NonZeroU8) -> Self {
+        match value.get() {
             1 => HostStatus::Connected(false),
             2 => HostStatus::Connected(true),
             3 => HostStatus::Running(false),
             4 => HostStatus::Running(true),
-            _ => return Err(()),
-        };
-        Ok(value)
+            _ => panic!("Invalid value"),
+        }
     }
 }
 
@@ -180,14 +178,17 @@ impl LedManager {
     fn current_host_status() -> Option<HostStatus> {
         let value = Self::host_status_storage().load(Ordering::Relaxed);
 
-        HostStatus::try_from(value).ok()
+        NonZeroU8::new(value).map(HostStatus::from)
     }
 
-    pub fn set_host_status(host_status: dap_rs::dap::HostStatus) {
-        let host_status: HostStatus = host_status.into();
-        let value: NonZeroU8 = host_status.into();
+    pub fn set_host_status(host_status: Option<dap_rs::dap::HostStatus>) {
+        let host_status: Option<HostStatus> = host_status.map(Into::into);
+        let value: u8 = host_status
+            .map(NonZeroU8::from)
+            .map(NonZeroU8::get)
+            .unwrap_or(0);
 
-        Self::host_status_storage().store(value.get(), Ordering::Relaxed);
+        Self::host_status_storage().store(value, Ordering::Relaxed);
 
         defmt::debug!("Host status is now {}", host_status);
 
@@ -305,6 +306,11 @@ impl LedManager {
             let new_host_status = Self::current_host_status();
 
             if new_vtarget != current_vtarget {
+                // A change in Vtarget means that a cable was re- or disconnected, in
+                // which case knowing the core status is impossible, so we just reset
+                // it to the default.
+                Self::set_host_status(None);
+
                 Poll::Ready((new_host_status, new_vtarget))
             } else if new_host_status != current_host_status {
                 Poll::Ready((new_host_status, new_vtarget))
@@ -332,6 +338,6 @@ pub struct HostStatusToken {
 
 impl DapLeds for HostStatusToken {
     fn react_to_host_status(&mut self, host_status: dap_rs::dap::HostStatus) {
-        LedManager::set_host_status(host_status);
+        LedManager::set_host_status(Some(host_status));
     }
 }
