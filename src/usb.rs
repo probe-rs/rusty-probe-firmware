@@ -1,7 +1,7 @@
 use dap_rs::usb::{dap_v1::CmsisDapV1, dap_v2::CmsisDapV2, winusb::MicrosoftDescriptors, Request};
+use dap_rs::usb_device::{class_prelude::*, prelude::*};
 use defmt::*;
 use rp2040_hal::usb::UsbBus;
-use usb_device::{class_prelude::*, prelude::*};
 use usbd_serial::SerialPort;
 
 /// Implements the CMSIS DAP descriptors.
@@ -32,13 +32,19 @@ impl ProbeUsb {
         let id = crate::device_signature::device_id_hex();
         info!("Device ID: {}", id);
 
-        let device = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0x4853))
+        let descriptors = StringDescriptors::new(LangID::EN)
             .manufacturer("Probe-rs development team")
             .product("Rusty Probe with CMSIS-DAP v1/v2 Support")
-            .serial_number(id)
+            .serial_number(id);
+
+        let device = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0x4853))
+            .strings(&[descriptors])
+            .unwrap() // unwrap: Error is returned only if more than 16 languages are supplied.
             .device_class(0)
             .max_packet_size_0(64)
+            .unwrap() // unwrap: 64 is a valid packet size
             .max_power(500)
+            .unwrap() // unwrap: 500 is a valid power value
             .build();
 
         let device_state = device.state();

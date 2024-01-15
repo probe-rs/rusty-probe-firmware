@@ -1,8 +1,7 @@
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
 use rp2040_hal::{
     gpio::{
-        bank0::*, Disabled, DynPin, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin,
-        PullDown,
+        bank0::*, DynFunction, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin, PullDown,
     },
     pac::{PIO0, RESETS},
     pio::{PIOBuilder, PIOExt, PinDir, PinState, ShiftDirection},
@@ -11,9 +10,9 @@ use rp2040_hal::{
 pub fn setup_pio(
     resets: &mut RESETS,
     pio0: PIO0,
-    mut swdclk: Pin<Gpio11, Disabled<PullDown>>,
-    mut swdio: Pin<Gpio10, Disabled<PullDown>>,
-    mut swdio_dir: Pin<Gpio12, Disabled<PullDown>>,
+    mut swdclk: Pin<Gpio11, DynFunction, PullDown>,
+    mut swdio: Pin<Gpio10, DynFunction, PullDown>,
+    mut swdio_dir: Pin<Gpio12, DynFunction, PullDown>,
 ) -> () {
     // High speed IO
     swdio.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
@@ -32,16 +31,13 @@ pub fn setup_pio(
 
     // Initialize and start PIO
 
-    let swdclk: Pin<_, FunctionPio0> = swdclk.into_mode();
-    let swdclk: DynPin = swdclk.into();
-    let swdio: Pin<_, FunctionPio0> = swdio.into_mode();
-    let swdio: DynPin = swdio.into();
-    let swdio_dir: Pin<_, FunctionPio0> = swdio_dir.into_mode();
-    let swdio_dir: DynPin = swdio_dir.into();
+    let swdclk: Pin<_, FunctionPio0, PullDown> = swdclk.into_function();
+    let swdio: Pin<_, FunctionPio0, _> = swdio.into_function();
+    let swdio_dir: Pin<_, FunctionPio0, _> = swdio_dir.into_function();
 
     let (mut pio, sm0, _, _, _) = pio0.split(resets);
     let installed = pio.install(&program.program).unwrap();
-    let (mut sm, mut rx_fifo, mut tx_fifo) = PIOBuilder::from_program(installed)
+    let (mut sm, mut rx_fifo, mut tx_fifo) = PIOBuilder::from_installed_program(installed)
         .side_set_pin_base(swdclk.id().num)
         .out_shift_direction(ShiftDirection::Right)
         .out_pins(swdio.id().num, 1)

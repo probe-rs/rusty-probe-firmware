@@ -1,7 +1,7 @@
+use core::ptr::addr_of;
 use cortex_m::interrupt;
 use rp2040_hal::pac;
 use rp2040_hal::rom_data;
-use core::ptr::addr_of;
 
 pub fn device_id_hex() -> &'static str {
     static mut DEVICE_ID_STR: [u8; 22] = [0; 22];
@@ -26,8 +26,8 @@ pub fn device_id_hex() -> &'static str {
 #[link_section = ".data.ram_func"]
 unsafe fn set_cs(level: bool) {
     (&*pac::IO_QSPI::ptr())
-        .gpio_qspiss
-        .gpio_ctrl
+        .gpio_qspiss()
+        .gpio_ctrl()
         .modify(|_, w| {
             if level {
                 w.outover().high()
@@ -60,11 +60,11 @@ unsafe fn do_flash_cmd(txrxbuf: &mut [u8]) {
     let ssi = &*pac::XIP_SSI::ptr();
 
     for b in txrxbuf {
-        while !ssi.sr.read().tfnf().bit_is_set() {}
-        ssi.dr0.write(|w| w.dr().bits(*b as _));
+        while !ssi.sr().read().tfnf().bit_is_set() {}
+        ssi.dr0().write(|w| w.dr().bits(*b as _));
 
-        while !ssi.sr.read().rfne().bit_is_set() {}
-        *b = ssi.dr0.read().dr().bits() as _;
+        while !ssi.sr().read().rfne().bit_is_set() {}
+        *b = ssi.dr0().read().dr().bits() as _;
     }
 
     set_cs(true);
