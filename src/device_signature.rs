@@ -25,7 +25,7 @@ pub fn device_id_hex() -> &'static str {
 #[link_section = ".data.ram_func"]
 unsafe fn set_cs(level: bool) {
     (&*pac::IO_QSPI::ptr())
-        .gpio_qspiss
+        .gpio_qspiss()
         .gpio_ctrl
         .modify(|_, w| {
             if level {

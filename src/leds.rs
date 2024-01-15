@@ -5,7 +5,7 @@ use core::task::Poll;
 
 use dap_rs::dap::DapLeds;
 use embedded_hal::digital::v2::OutputPin;
-use rp2040_hal::gpio::{bank0::*, Pin, PushPullOutput};
+use rp2040_hal::gpio::{bank0::*, DynPullType, FunctionSio, Pin, PullDown, SioOutput};
 use rtic_common::waker_registration::CriticalSectionWakerRegistration;
 
 #[derive(Debug, Clone, Copy, PartialEq, defmt::Format)]
@@ -48,17 +48,17 @@ impl From<NonZeroU8> for HostStatus {
 }
 
 pub struct BoardLeds {
-    green: Pin<Gpio27, PushPullOutput>,
-    red: Pin<Gpio28, PushPullOutput>,
-    blue: Pin<Gpio29, PushPullOutput>,
+    green: Pin<Gpio27, FunctionSio<SioOutput>, PullDown>,
+    red: Pin<Gpio28, FunctionSio<SioOutput>, PullDown>,
+    blue: Pin<Gpio29, FunctionSio<SioOutput>, PullDown>,
     rgb: (bool, bool, bool),
 }
 
 impl BoardLeds {
     pub fn new(
-        red: Pin<Gpio28, PushPullOutput>,
-        green: Pin<Gpio27, PushPullOutput>,
-        blue: Pin<Gpio29, PushPullOutput>,
+        red: Pin<Gpio28, FunctionSio<SioOutput>, PullDown>,
+        green: Pin<Gpio27, FunctionSio<SioOutput>, PullDown>,
+        blue: Pin<Gpio29, FunctionSio<SioOutput>, PullDown>,
     ) -> Self {
         let mut me = Self {
             red,

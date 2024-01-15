@@ -3,15 +3,22 @@ use crate::leds::{BoardLeds, HostStatusToken, LedManager};
 use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
+use dap_rs::usb_device::class_prelude::UsbBusAllocator;
 use embedded_hal::adc::OneShot;
 use embedded_hal::digital::v2::OutputPin;
 use embedded_hal::PwmPin;
+use rp2040_hal::adc::AdcPin;
+use rp2040_hal::gpio::bank0::{
+    Gpio0, Gpio10, Gpio11, Gpio16, Gpio17, Gpio20, Gpio21, Gpio26, Gpio3, Gpio5, Gpio6, Gpio7,
+    Gpio9,
+};
+use rp2040_hal::gpio::{
+    DynFunction, DynPullType, DynSioConfig, FunctionSio, FunctionSioInput, FunctionSioOutput,
+    PullDown, PullNone, SioInput, SioOutput,
+};
 use rp2040_hal::{
     clocks::init_clocks_and_plls,
-    gpio::{
-        pin::bank0::*, FloatingInput, OutputDriveStrength, OutputSlewRate, Pin, Pins,
-        PushPullOutput,
-    },
+    gpio::{OutputDriveStrength, OutputSlewRate, Pin, Pins},
     pac,
     pwm::{self, FreeRunning, Pwm0, Pwm2, Slice},
     rom_data,
@@ -20,7 +27,6 @@ use rp2040_hal::{
     Adc, Clock, Sio,
 };
 use rtic_monotonics::rp2040;
-use usb_device::class_prelude::UsbBusAllocator;
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
@@ -107,7 +113,7 @@ pub fn setup(
     // let mut temperature_sensor = adc.enable_temp_sensor();
 
     // Configure GPIO26 as an ADC input
-    let adc_pin_0 = pins.gpio26.into_floating_input();
+    let adc_pin_0 = AdcPin::new(pins.gpio26.into_floating_input());
 
     let adc = TargetVccReader {
         pin: adc_pin_0,
@@ -179,11 +185,11 @@ pub fn setup(
 
     let dap_hander = dap::create_dap(
         git_version,
-        io.into(),
-        ck.into(),
-        reset.into(),
-        dir_io.into(),
-        dir_ck.into(),
+        io.reconfigure().into_dyn_pin(),
+        ck.reconfigure().into_dyn_pin(),
+        reset.reconfigure().into_dyn_pin(),
+        dir_io.into_push_pull_output().reconfigure().into_dyn_pin(),
+        dir_ck.into_push_pull_output().reconfigure().into_dyn_pin(),
         clocks.system_clock.freq().raw(),
         delay,
         host_status_token,
@@ -203,17 +209,17 @@ pub fn setup(
 }
 
 pub struct AllIOs {
-    pub io: Pin<Gpio10, PushPullOutput>,
-    pub ck: Pin<Gpio11, PushPullOutput>,
-    pub tdi: Pin<Gpio17, PushPullOutput>,
-    pub tdo_swo: Pin<Gpio16, PushPullOutput>,
-    pub reset: Pin<Gpio9, PushPullOutput>,
-    pub vcp_rx: Pin<Gpio21, PushPullOutput>,
-    pub vcp_tx: Pin<Gpio20, PushPullOutput>,
+    pub io: Pin<Gpio10, DynFunction, DynPullType>,
+    pub ck: Pin<Gpio11, DynFunction, DynPullType>,
+    pub tdi: Pin<Gpio17, DynFunction, DynPullType>,
+    pub tdo_swo: Pin<Gpio16, DynFunction, DynPullType>,
+    pub reset: Pin<Gpio9, DynFunction, DynPullType>,
+    pub vcp_rx: Pin<Gpio21, DynFunction, DynPullType>,
+    pub vcp_tx: Pin<Gpio20, DynFunction, DynPullType>,
 }
 
 pub struct TargetVccReader {
-    pub pin: Pin<Gpio26, FloatingInput>,
+    pub pin: AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>,
     pub adc: Adc,
 }
 
@@ -232,7 +238,7 @@ pub struct TranslatorPower {
 
 impl TranslatorPower {
     pub fn new(
-        mut vtranslator_pin: Pin<Gpio5, PushPullOutput>,
+        mut vtranslator_pin: Pin<Gpio5, FunctionSio<SioOutput>, PullDown>,
         mut vtranslator_pwm: Slice<Pwm2, FreeRunning>,
     ) -> Self {
         vtranslator_pwm.clr_ph_correct();
@@ -273,8 +279,8 @@ impl TranslatorPower {
 }
 
 pub struct TargetPower {
-    enable_5v_key: Pin<Gpio3, PushPullOutput>,
-    enable_vtgt: Pin<Gpio6, PushPullOutput>,
+    enable_5v_key: Pin<Gpio3, FunctionSioOutput, PullDown>,
+    enable_vtgt: Pin<Gpio6, FunctionSioOutput, PullDown>,
     vtgt_pwm: Slice<Pwm0, FreeRunning>,
 }
 
@@ -288,10 +294,10 @@ impl TargetPower {
     }
 
     pub fn new(
-        mut enable_5v_key: Pin<Gpio3, PushPullOutput>,
-        mut enable_5v: Pin<Gpio7, PushPullOutput>,
-        mut enable_vtgt: Pin<Gpio6, PushPullOutput>,
-        mut vtgt_pin: Pin<Gpio0, PushPullOutput>,
+        mut enable_5v_key: Pin<Gpio3, FunctionSioOutput, PullDown>,
+        mut enable_5v: Pin<Gpio7, FunctionSioOutput, PullDown>,
+        mut enable_vtgt: Pin<Gpio6, FunctionSioOutput, PullDown>,
+        mut vtgt_pin: Pin<Gpio0, FunctionSioOutput, PullDown>,
         mut vtgt_pwm: Slice<Pwm0, FreeRunning>,
     ) -> Self {
         // Always enable the protected 5v (existed until rev E of hardware)
