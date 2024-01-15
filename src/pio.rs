@@ -1,4 +1,4 @@
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
 use rp2040_hal::{
     gpio::{
         bank0::*, DynFunction, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin, PullDown,

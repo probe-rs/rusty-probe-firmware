@@ -4,7 +4,7 @@ use core::sync::atomic::{AtomicU8, Ordering};
 use core::task::Poll;
 
 use dap_rs::dap::DapLeds;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
 use rp2040_hal::gpio::{bank0::*, DynPullType, FunctionSio, Pin, PullDown, SioOutput};
 use rtic_common::waker_registration::CriticalSectionWakerRegistration;
 

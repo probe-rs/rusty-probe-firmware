@@ -16,7 +16,12 @@ rtic-monotonics = { git = "https://github.com/rtic-rs/rtic.git", branch = "maste
 ] }
 rtic-common = { git = "https://github.com/rtic-rs/rtic.git", branch = "master" }
 defmt = { version = "=0.3.2", features = ["encoding-rzcobs"] }
-embedded-hal = { version = "0.2.5", features = ["unproven"] }
+embedded-hal = { version = "1.0.0" }
+
+# Use for the ADC trait, removed in embedded-hal 1.0
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = [
+    "unproven",
+] }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
 replace_with = { version = "0.1.7", default-features = false, features = [
     "panic_abort",
@@ -97,4 +102,4 @@ lto = 'fat'
 opt-level = 3
 
 [patch.crates-io]
-rp2040-hal = { git = "https://github.com/tiwalun/rp-hal", branch = "issue-756" }
+rp2040-hal = { git = "https://github.com/jannic/rp-hal", branch = "issue-756" }

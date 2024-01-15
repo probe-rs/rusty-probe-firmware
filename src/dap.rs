@@ -2,8 +2,8 @@ use crate::systick_delay::Delay;
 use dap_rs::{swj::Dependencies, *};
 use defmt::trace;
 use embedded_hal::{
-    blocking::delay::DelayUs,
-    digital::v2::{InputPin, OutputPin, PinState},
+    delay::DelayNs,
+    digital::{InputPin, OutputPin, PinState},
 };
 
 use rp2040_hal::gpio::{
@@ -527,9 +527,10 @@ impl Wait {
     }
 }
 
-impl DelayUs<u32> for Wait {
-    fn delay_us(&mut self, us: u32) {
-        self.delay.delay_us(us);
+impl DelayNs for Wait {
+    fn delay_ns(&mut self, ns: u32) {
+        // TODO: Use delay from hal
+        self.delay.delay_us(ns);
     }
 }
 

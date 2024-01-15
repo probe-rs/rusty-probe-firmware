@@ -4,9 +4,9 @@ use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use dap_rs::usb_device::class_prelude::UsbBusAllocator;
-use embedded_hal::adc::OneShot;
-use embedded_hal::digital::v2::OutputPin;
-use embedded_hal::PwmPin;
+use embedded_hal::digital::OutputPin;
+use embedded_hal::pwm::SetDutyCycle;
+use embedded_hal_02::adc::OneShot;
 use rp2040_hal::adc::AdcPin;
 use rp2040_hal::gpio::bank0::{
     Gpio0, Gpio10, Gpio11, Gpio16, Gpio17, Gpio20, Gpio21, Gpio26, Gpio3, Gpio5, Gpio6, Gpio7,
@@ -251,7 +251,7 @@ impl TranslatorPower {
         // Output channel B on PWM2 to GPIO 5
         let channel = &mut vtranslator_pwm.channel_b;
         channel.output_to(vtranslator_pin);
-        channel.set_duty(1023);
+        channel.set_duty_cycle(1023);
 
         Self { vtranslator_pwm }
     }
@@ -274,7 +274,7 @@ impl TranslatorPower {
         let cnt = ((vomax - vomin - mv_diff) * limit_diff) / (vomax - vomin) + v33;
 
         let channel = &mut self.vtranslator_pwm.channel_b;
-        channel.set_duty(cnt as u16);
+        channel.set_duty_cycle(cnt as u16);
     }
 }
 
@@ -316,7 +316,7 @@ impl TargetPower {
         // Output channel A on PWM0 to GPIO 0
         let channel = &mut vtgt_pwm.channel_a;
         channel.output_to(vtgt_pin);
-        channel.set_duty(1023);
+        channel.set_duty_cycle(1023).ok();
 
         Self {
             enable_5v_key,
@@ -340,6 +340,6 @@ impl TargetPower {
         let cnt = ((vomax - vomin - mv_diff) * limit_diff) / (vomax - vomin) + v33;
 
         let channel = &mut self.vtgt_pwm.channel_a;
-        channel.set_duty(cnt as u16);
+        channel.set_duty_cycle(cnt as u16);
     }
 }
