@@ -97,5 +97,4 @@ lto = 'fat'
 opt-level = 3
 
 [patch.crates-io]
-#rp2040-hal = { git = "https://github.com/rp-rs/rp-hal" }
-rp2040-hal = { path = "../rp-hal/rp2040-hal" }
+rp2040-hal = { git = "https://github.com/tiwalun/rp-hal", branch = "issue-756" }

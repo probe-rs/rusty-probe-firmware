@@ -994,6 +994,7 @@ dependencies = [
 [[package]]
 name = "rp2040-hal"
 version = "0.9.1"
+source = "git+https://github.com/tiwalun/rp-hal?branch=issue-756#ef131951fac7ec0c4ee5f248c2d4402824883f38"
 dependencies = [
  "bitfield 0.14.0",
  "cortex-m 0.7.7",
@@ -1020,6 +1021,7 @@ dependencies = [
 [[package]]
 name = "rp2040-hal-macros"
 version = "0.1.0"
+source = "git+https://github.com/tiwalun/rp-hal?branch=issue-756#ef131951fac7ec0c4ee5f248c2d4402824883f38"
 dependencies = [
  "proc-macro2",
  "quote",
