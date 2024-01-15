@@ -1,20 +1,18 @@
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
 
 use pico_probe as _;
 
 #[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ, CLOCKS_IRQ])]
 mod app {
     use core::mem::MaybeUninit;
+    use dap_rs::usb_device::class_prelude::*;
     use pico_probe::{
         leds::{LedManager, Vtarget},
         setup::*,
     };
     use rp2040_hal::usb::UsbBus;
-    use usb_device::class_prelude::*;
-
-    use rtic_monotonics::rp2040::{ExtU64, Timer};
+    use rtic_monotonics::rp2040::prelude::*;
 
     #[shared]
     struct Shared {
@@ -101,7 +99,7 @@ mod app {
                 }
             };
 
-            Timer::delay(100.millis()).await;
+            Mono::delay(100.millis()).await;
         }
     }
 
@@ -111,7 +109,7 @@ mod app {
             ctx.shared
                 .probe_usb
                 .lock(|probe_usb| probe_usb.flush_logs());
-            Timer::delay(100.millis()).await;
+            Mono::delay(100.millis()).await;
         }
     }
 
