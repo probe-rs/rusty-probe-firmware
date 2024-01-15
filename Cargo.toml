@@ -7,23 +7,36 @@ version = "0.1.0"
 [dependencies]
 bitflags = "1.3.2"
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
-rtic = { git = "https://github.com/rtic-rs/rtic.git", branch = "master", features= ["thumbv6-backend"] }
-rtic-monotonics = { git = "https://github.com/rtic-rs/rtic.git", branch = "master", features = ["rp2040", "cortex-m-systick"] }
+rtic = { git = "https://github.com/rtic-rs/rtic.git", branch = "master", features = [
+    "thumbv6-backend",
+] }
+rtic-monotonics = { git = "https://github.com/rtic-rs/rtic.git", branch = "master", features = [
+    "rp2040",
+    "cortex-m-systick",
+] }
 rtic-common = { git = "https://github.com/rtic-rs/rtic.git", branch = "master" }
 defmt = { version = "=0.3.2", features = ["encoding-rzcobs"] }
-embedded-hal = { version = "0.2.5", features = ["unproven"] }
+embedded-hal = { version = "1.0.0" }
+
+# Use for the ADC trait, removed in embedded-hal 1.0
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = [
+    "unproven",
+] }
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
-replace_with = { version = "0.1.7", default-features = false, features = ["panic_abort"] }
-usb-device = "0.2.9"
-usbd-serial = "0.1.1"
-dap-rs = { git = "https://github.com/korken89/dap-rs.git", features = ["defmt"] }
+replace_with = { version = "0.1.7", default-features = false, features = [
+    "panic_abort",
+] }
+usbd-serial = "0.2.0"
+dap-rs = { git = "https://github.com/probe-rs/dap-rs.git", branch = "update-usb-device", features = [
+    "defmt",
+] }
 git-version = "0.3.5"
 pio-proc = "0.2.1"
 pio = "0.2.1"
 futures-util = { version = "0.3.27", default-features = false }
 
 # If you're not going to use a Board Support Package you'll need these:
-rp2040-hal = { version = "0.8.0", features = ["rt"] }
+rp2040-hal = { version = "0.9.0", features = ["rt"] }
 rp2040-boot2 = "0.2.1"
 
 defmt-brtt = { version = "0.1.0", default-features = false }
@@ -32,7 +45,7 @@ defmt-brtt = { version = "0.1.0", default-features = false }
 bbqueue = { version = "0.5", features = ["thumbv6"], optional = true }
 
 [features]
-default = [ "defmt-brtt/rtt" ]
+default = ["defmt-brtt/rtt"]
 defmt-bbq = ["defmt-brtt/bbq", "dep:bbqueue"]
 usb-serial-reboot = []
 
@@ -87,3 +100,6 @@ debug-assertions = false
 incremental = false
 lto = 'fat'
 opt-level = 3
+
+[patch.crates-io]
+rp2040-hal = { git = "https://github.com/jannic/rp-hal", branch = "issue-756" }

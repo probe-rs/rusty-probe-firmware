@@ -2,10 +2,14 @@ use crate::systick_delay::Delay;
 use dap_rs::{swj::Dependencies, *};
 use defmt::trace;
 use embedded_hal::{
-    blocking::delay::DelayUs,
-    digital::v2::{InputPin, OutputPin, PinState},
+    delay::DelayNs,
+    digital::{InputPin, OutputPin, PinState},
 };
-use rp2040_hal::gpio::DynPin;
+
+use rp2040_hal::gpio::{
+    AnyPin, DynFunction, DynPinId, DynPullType, FunctionSio, FunctionSioInput, FunctionSioOutput,
+    Pin, PullDown, SioOutput, SpecificPin,
+};
 
 pub struct Context {
     max_frequency: u32,
@@ -13,11 +17,11 @@ pub struct Context {
     cycles_per_us: u32,
     half_period_ticks: u32,
     delay: &'static Delay,
-    swdio: DynPin,
-    swclk: DynPin,
-    nreset: DynPin,
-    dir_swdio: DynPin,
-    dir_swclk: DynPin,
+    swdio: Pin<DynPinId, DynFunction, DynPullType>,
+    swclk: Pin<DynPinId, DynFunction, DynPullType>,
+    nreset: Pin<DynPinId, DynFunction, DynPullType>,
+    dir_swdio: Pin<DynPinId, FunctionSio<SioOutput>, DynPullType>,
+    dir_swclk: Pin<DynPinId, FunctionSio<SioOutput>, DynPullType>,
 }
 
 impl defmt::Format for Context {
@@ -49,12 +53,21 @@ impl Context {
     fn swdio_to_input(&mut self) {
         defmt::trace!("SWDIO -> input");
         self.dir_swdio.set_low().ok();
-        self.swdio.into_pull_down_input();
+
+        // Get a specific pin
+        // self.swdio.into_pull_down_input();
+
+        self.swdio
+            .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Input))
+            .ok();
     }
 
     fn swdio_to_output(&mut self) {
         defmt::trace!("SWDIO -> output");
-        self.swdio.into_push_pull_output();
+        //self.swdio.into_push_pull_output();
+        self.swdio
+            .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Output))
+            .ok();
         self.swdio.set_high().ok();
         self.dir_swdio.set_high().ok();
     }
@@ -62,28 +75,31 @@ impl Context {
     fn swclk_to_input(&mut self) {
         defmt::trace!("SWCLK -> input");
         self.dir_swclk.set_low().ok();
-        self.swclk.into_pull_down_input();
+        //self.swclk.into_pull_down_input();
+        self.swclk
+            .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Input))
+            .ok();
     }
 
     fn swclk_to_output(&mut self) {
         defmt::trace!("SWCLK -> output");
-        self.swclk.into_push_pull_output();
+        self.swclk
+            .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Output))
+            .ok();
+        //self.swclk.into_push_pull_output();
         self.swclk.set_high().ok();
         self.dir_swclk.set_high().ok();
     }
 
     fn from_pins(
-        swdio: DynPin,
-        swclk: DynPin,
-        nreset: DynPin,
-        mut dir_swdio: DynPin,
-        mut dir_swclk: DynPin,
+        swdio: Pin<DynPinId, DynFunction, DynPullType>,
+        swclk: Pin<DynPinId, DynFunction, DynPullType>,
+        nreset: Pin<DynPinId, DynFunction, DynPullType>,
+        mut dir_swdio: Pin<DynPinId, FunctionSioOutput, DynPullType>,
+        mut dir_swclk: Pin<DynPinId, FunctionSioOutput, DynPullType>,
         cpu_frequency: u32,
         delay: &'static Delay,
     ) -> Self {
-        dir_swdio.into_push_pull_output();
-        dir_swclk.into_push_pull_output();
-
         dir_swdio.set_low().ok();
         dir_swclk.set_low().ok();
         defmt::trace!("SWCLK -> input");
@@ -134,9 +150,18 @@ impl swj::Dependencies<Swd, Jtag> for Context {
             if output.contains(swj::Pins::NRESET) {
                 // "open drain"
                 // TODO: What is really "output open drain"?
-                self.nreset.into_pull_up_input();
+                //self.nreset.into_pull_up_input();
+
+                self.nreset
+                    .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Input))
+                    .ok();
+                self.nreset.set_pull_type(DynPullType::Up);
             } else {
-                self.nreset.into_push_pull_output();
+                //self.nreset.into_push_pull_output();
+                self.nreset
+                    .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Output))
+                    .ok();
+                self.nreset.set_pull_type(DynPullType::Down);
                 self.nreset.set_low().ok();
             }
         }
@@ -203,7 +228,10 @@ impl swj::Dependencies<Swd, Jtag> for Context {
     fn high_impedance_mode(&mut self) {
         self.swdio_to_input();
         self.swclk_to_input();
-        self.nreset.into_floating_disabled();
+
+        self.nreset.set_pull_type(DynPullType::None);
+        self.nreset.try_set_function(DynFunction::Null).ok();
+        //self.nreset.into_floating_disabled();
     }
 }
 
@@ -247,7 +275,9 @@ impl From<Context> for Swd {
         // Maybe this should go to some `Swd::new`
         value.swdio_to_output();
         value.swclk_to_output();
-        value.nreset.into_floating_disabled();
+        //value.nreset.into_floating_disabled();
+        value.nreset.set_pull_type(DynPullType::None);
+        value.nreset.try_set_function(DynFunction::Null).ok();
         Self(value)
     }
 }
@@ -497,20 +527,20 @@ impl Wait {
     }
 }
 
-impl DelayUs<u32> for Wait {
-    fn delay_us(&mut self, us: u32) {
-        self.delay.delay_us(us);
+impl DelayNs for Wait {
+    fn delay_ns(&mut self, ns: u32) {
+        self.delay.delay_ns(ns);
     }
 }
 
 #[inline(always)]
 pub fn create_dap(
     version_string: &'static str,
-    swdio: DynPin,
-    swclk: DynPin,
-    nreset: DynPin,
-    dir_swdio: DynPin,
-    dir_swclk: DynPin,
+    swdio: Pin<DynPinId, DynFunction, DynPullType>,
+    swclk: Pin<DynPinId, DynFunction, DynPullType>,
+    nreset: Pin<DynPinId, DynFunction, DynPullType>,
+    dir_swdio: Pin<DynPinId, FunctionSioOutput, DynPullType>,
+    dir_swclk: Pin<DynPinId, FunctionSioOutput, DynPullType>,
     cpu_frequency: u32,
     delay: &'static Delay,
     leds: crate::leds::HostStatusToken,
