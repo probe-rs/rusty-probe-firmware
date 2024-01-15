@@ -2,7 +2,7 @@ use cortex_m::peripheral::{syst::SystClkSource, SYST};
 
 pub struct Delay {
     systick: SYST,
-    ticks_per_us: u32,
+    ticks_per_ns: u32,
 }
 
 impl Delay {
@@ -19,15 +19,15 @@ impl Delay {
 
         Delay {
             systick,
-            ticks_per_us: (cpu_frequency + 500_000) / 1_000_000,
+            ticks_per_ns: (cpu_frequency + 500_000_000u32) / 1_000_000_000u32,
         }
     }
 
-    pub fn delay_us(&self, mut us: u32) {
-        while us > 0x1fff {
-            let ticks = (us & 0x1fff) * self.ticks_per_us;
+    pub fn delay_ns(&self, mut ns: u32) {
+        while ns > 0x1fff {
+            let ticks = (ns & 0x1fff) * self.ticks_per_ns;
             self.delay_ticks(ticks as u32);
-            us -= us & 0x1fff;
+            ns -= ns & 0x1fff;
         }
     }
 

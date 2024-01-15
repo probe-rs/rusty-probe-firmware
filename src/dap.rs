@@ -529,8 +529,7 @@ impl Wait {
 
 impl DelayNs for Wait {
     fn delay_ns(&mut self, ns: u32) {
-        // TODO: Use delay from hal
-        self.delay.delay_us(ns);
+        self.delay.delay_ns(ns);
     }
 }
 
