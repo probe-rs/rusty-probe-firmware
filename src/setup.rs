@@ -4,14 +4,12 @@ use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use embedded_hal::adc::OneShot;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::{InputPin, OutputPin};
 use embedded_hal::PwmPin;
+use rp2040_hal::gpio::{FunctionSioInput, FunctionSioOutput, PullDown, PullNone, PullUp};
 use rp2040_hal::{
     clocks::init_clocks_and_plls,
-    gpio::{
-        pin::bank0::*, FloatingInput, OutputDriveStrength, OutputSlewRate, Pin, Pins,
-        PushPullOutput,
-    },
+    gpio::{bank0::*, OutputDriveStrength, OutputSlewRate, Pin, Pins},
     pac,
     pwm::{self, FreeRunning, Pwm0, Pwm2, Slice},
     rom_data,
@@ -45,6 +43,7 @@ pub fn setup(
     TargetVccReader,
     TranslatorPower,
     TargetPower,
+    TargetPhysicallyConnected,
 ) {
     let mut resets = pac.RESETS;
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -151,6 +150,7 @@ pub fn setup(
     let mut dir_io = pins.gpio12;
     let mut dir_ck = pins.gpio19;
     let reset = pins.gpio9;
+    let gnd_detect = pins.gpio8.into_pull_up_input();
 
     let _tdi = pins.gpio17;
     let _dir_tdi = pins.gpio23;
@@ -176,6 +176,7 @@ pub fn setup(
     let board_leds = BoardLeds::new(led_red, led_green, led_blue);
     let mut led_manager = LedManager::new(board_leds);
     let host_status_token = led_manager.host_status_token();
+    let target_physically_connected = TargetPhysicallyConnected { pin: gnd_detect };
 
     let dap_hander = dap::create_dap(
         git_version,
@@ -190,7 +191,13 @@ pub fn setup(
     );
 
     let timer_token = rtic_monotonics::create_rp2040_monotonic_token!();
-    rp2040::Timer::start(pac.TIMER, &mut resets, timer_token);
+    // TODO(unsafe): Upgrade everything to latest PAC and HAL
+    unsafe {
+        let _timer = pac.TIMER;
+        let resets = core::mem::transmute(());
+        let timer = core::mem::transmute(());
+        rp2040::Timer::start(timer, &resets, timer_token);
+    }
 
     (
         led_manager,
@@ -199,21 +206,33 @@ pub fn setup(
         adc,
         translator_power,
         target_power,
+        target_physically_connected,
     )
 }
 
 pub struct AllIOs {
-    pub io: Pin<Gpio10, PushPullOutput>,
-    pub ck: Pin<Gpio11, PushPullOutput>,
-    pub tdi: Pin<Gpio17, PushPullOutput>,
-    pub tdo_swo: Pin<Gpio16, PushPullOutput>,
-    pub reset: Pin<Gpio9, PushPullOutput>,
-    pub vcp_rx: Pin<Gpio21, PushPullOutput>,
-    pub vcp_tx: Pin<Gpio20, PushPullOutput>,
+    pub io: Pin<Gpio10, FunctionSioOutput, PullDown>,
+    pub ck: Pin<Gpio11, FunctionSioOutput, PullDown>,
+    pub tdi: Pin<Gpio17, FunctionSioOutput, PullDown>,
+    pub tdo_swo: Pin<Gpio16, FunctionSioOutput, PullDown>,
+    pub reset: Pin<Gpio9, FunctionSioOutput, PullDown>,
+    pub vcp_rx: Pin<Gpio21, FunctionSioOutput, PullDown>,
+    pub vcp_tx: Pin<Gpio20, FunctionSioOutput, PullDown>,
+}
+
+pub struct TargetPhysicallyConnected {
+    pin: Pin<Gpio8, FunctionSioInput, PullUp>,
+}
+
+impl TargetPhysicallyConnected {
+    /// This checks for the target being connected via the GND detect pin.
+    pub fn target_detected(&self) -> bool {
+        matches!(self.pin.is_low(), Ok(true))
+    }
 }
 
 pub struct TargetVccReader {
-    pub pin: Pin<Gpio26, FloatingInput>,
+    pub pin: Pin<Gpio26, FunctionSioInput, PullNone>,
     pub adc: Adc,
 }
 
@@ -232,7 +251,7 @@ pub struct TranslatorPower {
 
 impl TranslatorPower {
     pub fn new(
-        mut vtranslator_pin: Pin<Gpio5, PushPullOutput>,
+        mut vtranslator_pin: Pin<Gpio5, FunctionSioOutput, PullDown>,
         mut vtranslator_pwm: Slice<Pwm2, FreeRunning>,
     ) -> Self {
         vtranslator_pwm.clr_ph_correct();
@@ -273,8 +292,8 @@ impl TranslatorPower {
 }
 
 pub struct TargetPower {
-    enable_5v_key: Pin<Gpio3, PushPullOutput>,
-    enable_vtgt: Pin<Gpio6, PushPullOutput>,
+    enable_5v_key: Pin<Gpio3, FunctionSioOutput, PullDown>,
+    enable_vtgt: Pin<Gpio6, FunctionSioOutput, PullDown>,
     vtgt_pwm: Slice<Pwm0, FreeRunning>,
 }
 
@@ -288,10 +307,10 @@ impl TargetPower {
     }
 
     pub fn new(
-        mut enable_5v_key: Pin<Gpio3, PushPullOutput>,
-        mut enable_5v: Pin<Gpio7, PushPullOutput>,
-        mut enable_vtgt: Pin<Gpio6, PushPullOutput>,
-        mut vtgt_pin: Pin<Gpio0, PushPullOutput>,
+        mut enable_5v_key: Pin<Gpio3, FunctionSioOutput, PullDown>,
+        mut enable_5v: Pin<Gpio7, FunctionSioOutput, PullDown>,
+        mut enable_vtgt: Pin<Gpio6, FunctionSioOutput, PullDown>,
+        mut vtgt_pin: Pin<Gpio0, FunctionSioOutput, PullDown>,
         mut vtgt_pwm: Slice<Pwm0, FreeRunning>,
     ) -> Self {
         // Always enable the protected 5v (existed until rev E of hardware)

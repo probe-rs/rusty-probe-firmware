@@ -5,7 +5,7 @@ use embedded_hal::{
     blocking::delay::DelayUs,
     digital::v2::{InputPin, OutputPin, PinState},
 };
-use rp2040_hal::gpio::DynPin;
+use rp2040_hal::gpio::{DynFunction, DynPinId, Pin, PullNone};
 
 pub struct Context {
     max_frequency: u32,
@@ -13,11 +13,11 @@ pub struct Context {
     cycles_per_us: u32,
     half_period_ticks: u32,
     delay: &'static Delay,
-    swdio: DynPin,
-    swclk: DynPin,
-    nreset: DynPin,
-    dir_swdio: DynPin,
-    dir_swclk: DynPin,
+    swdio: Pin<DynPinId, DynFunction, PullNone>,
+    swclk: Pin<DynPinId, DynFunction, PullNone>,
+    nreset: Pin<DynPinId, DynFunction, PullNone>,
+    dir_swdio: Pin<DynPinId, DynFunction, PullNone>,
+    dir_swclk: Pin<DynPinId, DynFunction, PullNone>,
 }
 
 impl defmt::Format for Context {
@@ -73,11 +73,11 @@ impl Context {
     }
 
     fn from_pins(
-        swdio: DynPin,
-        swclk: DynPin,
-        nreset: DynPin,
-        mut dir_swdio: DynPin,
-        mut dir_swclk: DynPin,
+        swdio: Pin<DynPinId, DynFunction, PullNone>,
+        swclk: Pin<DynPinId, DynFunction, PullNone>,
+        nreset: Pin<DynPinId, DynFunction, PullNone>,
+        mut dir_swdio: Pin<DynPinId, DynFunction, PullNone>,
+        mut dir_swclk: Pin<DynPinId, DynFunction, PullNone>,
         cpu_frequency: u32,
         delay: &'static Delay,
     ) -> Self {
@@ -506,11 +506,11 @@ impl DelayUs<u32> for Wait {
 #[inline(always)]
 pub fn create_dap(
     version_string: &'static str,
-    swdio: DynPin,
-    swclk: DynPin,
-    nreset: DynPin,
-    dir_swdio: DynPin,
-    dir_swclk: DynPin,
+    swdio: Pin<DynPinId, DynFunction, PullNone>,
+    swclk: Pin<DynPinId, DynFunction, PullNone>,
+    nreset: Pin<DynPinId, DynFunction, PullNone>,
+    dir_swdio: Pin<DynPinId, DynFunction, PullNone>,
+    dir_swclk: Pin<DynPinId, DynFunction, PullNone>,
     cpu_frequency: u32,
     delay: &'static Delay,
     leds: crate::leds::HostStatusToken,

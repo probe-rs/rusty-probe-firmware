@@ -1,8 +1,8 @@
 use embedded_hal::digital::v2::OutputPin;
 use rp2040_hal::{
     gpio::{
-        bank0::*, Disabled, DynPin, FunctionPio0, OutputDriveStrength, OutputSlewRate, Pin,
-        PullDown,
+        bank0::*, DynPinId, FunctionNull, FunctionPio0, FunctionSioOutput, OutputDriveStrength,
+        OutputSlewRate, Pin, PullDown, PullNone,
     },
     pac::{PIO0, RESETS},
     pio::{PIOBuilder, PIOExt, PinDir, PinState, ShiftDirection},
@@ -11,9 +11,9 @@ use rp2040_hal::{
 pub fn setup_pio(
     resets: &mut RESETS,
     pio0: PIO0,
-    mut swdclk: Pin<Gpio11, Disabled<PullDown>>,
-    mut swdio: Pin<Gpio10, Disabled<PullDown>>,
-    mut swdio_dir: Pin<Gpio12, Disabled<PullDown>>,
+    mut swdclk: Pin<Gpio11, FunctionNull, PullDown>,
+    mut swdio: Pin<Gpio10, FunctionNull, PullDown>,
+    mut swdio_dir: Pin<Gpio12, FunctionNull, PullDown>,
 ) -> () {
     // High speed IO
     swdio.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
@@ -32,12 +32,21 @@ pub fn setup_pio(
 
     // Initialize and start PIO
 
-    let swdclk: Pin<_, FunctionPio0> = swdclk.into_mode();
-    let swdclk: DynPin = swdclk.into();
-    let swdio: Pin<_, FunctionPio0> = swdio.into_mode();
-    let swdio: DynPin = swdio.into();
-    let swdio_dir: Pin<_, FunctionPio0> = swdio_dir.into_mode();
-    let swdio_dir: DynPin = swdio_dir.into();
+    let swdclk: Pin<_, FunctionPio0, _> = swdclk.into_function();
+    let swdclk: Pin<DynPinId, FunctionSioOutput, PullNone> = swdclk
+        .into_push_pull_output()
+        .into_pull_type()
+        .into_dyn_pin();
+    let swdio: Pin<_, FunctionPio0, _> = swdio.into_function();
+    let swdio: Pin<DynPinId, FunctionSioOutput, PullNone> = swdio
+        .into_push_pull_output()
+        .into_pull_type()
+        .into_dyn_pin();
+    let swdio_dir: Pin<_, FunctionPio0, _> = swdio_dir.into_function();
+    let swdio_dir: Pin<DynPinId, FunctionSioOutput, PullNone> = swdio_dir
+        .into_push_pull_output()
+        .into_pull_type()
+        .into_dyn_pin();
 
     let (mut pio, sm0, _, _, _) = pio0.split(resets);
     let installed = pio.install(&program.program).unwrap();
