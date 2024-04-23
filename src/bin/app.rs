@@ -27,6 +27,7 @@ mod app {
         target_vcc: TargetVccReader,
         translator_power: TranslatorPower,
         target_power: TargetPower,
+        target_physically_connected: TargetPhysicallyConnected,
     }
 
     #[init(local = [
@@ -34,8 +35,15 @@ mod app {
         delay: MaybeUninit<pico_probe::systick_delay::Delay> = MaybeUninit::uninit(),
     ])]
     fn init(cx: init::Context) -> (Shared, Local) {
-        let (leds, probe_usb, dap_handler, target_vcc, translator_power, target_power) =
-            setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
+        let (
+            leds,
+            probe_usb,
+            dap_handler,
+            target_vcc,
+            translator_power,
+            target_power,
+            target_physically_connected,
+        ) = setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
 
         voltage_translator_control::spawn().ok();
 
@@ -51,6 +59,7 @@ mod app {
                 target_vcc,
                 translator_power,
                 target_power,
+                target_physically_connected,
             },
         )
     }
@@ -60,12 +69,22 @@ mod app {
         leds.run().await;
     }
 
-    #[task(priority = 3, local = [ target_vcc, translator_power, target_power])]
+    #[task(priority = 3, local = [target_vcc, translator_power, target_power, target_physically_connected])]
     async fn voltage_translator_control(cx: voltage_translator_control::Context) {
         loop {
             // Set the voltage translators to track Target's VCC
             let target_vcc_mv = cx.local.target_vcc.read_voltage_mv();
-            cx.local.translator_power.set_translator_vcc(target_vcc_mv);
+
+            if target_vcc_mv > 1500 {
+                cx.local.translator_power.set_translator_vcc(target_vcc_mv);
+            } else {
+                if cx.local.target_physically_connected.target_detected() {
+                    // If there is no VCC detected use 3.3v.
+                    cx.local.translator_power.set_translator_vcc(3300);
+                } else {
+                    cx.local.translator_power.set_translator_vcc(0);
+                }
+            }
 
             defmt::trace!("Tracking Target VCC at {} mV", target_vcc_mv);
 
@@ -74,7 +93,12 @@ mod app {
             } else if target_vcc_mv > 1500 {
                 LedManager::set_current_vtarget(Some(Vtarget::Voltage1V8));
             } else {
-                LedManager::set_current_vtarget(None);
+                if cx.local.target_physically_connected.target_detected() {
+                    // If there is no VCC detected use 3.3v.
+                    LedManager::set_current_vtarget(Some(Vtarget::Voltage3V3));
+                } else {
+                    LedManager::set_current_vtarget(None);
+                }
             };
 
             Timer::delay(100.millis()).await;

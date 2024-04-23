@@ -10,7 +10,7 @@ use rp2040_hal::{
     clocks::init_clocks_and_plls,
     gpio::{
         pin::bank0::*, FloatingInput, OutputDriveStrength, OutputSlewRate, Pin, Pins,
-        PushPullOutput,
+        PushPullOutput, PullUpInput,
     },
     pac,
     pwm::{self, FreeRunning, Pwm0, Pwm2, Slice},
@@ -21,6 +21,7 @@ use rp2040_hal::{
 };
 use rtic_monotonics::rp2040;
 use usb_device::class_prelude::UsbBusAllocator;
+use embedded_hal::digital::v2::InputPin;
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
@@ -45,6 +46,7 @@ pub fn setup(
     TargetVccReader,
     TranslatorPower,
     TargetPower,
+    TargetPhysicallyConnected,
 ) {
     let mut resets = pac.RESETS;
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -151,6 +153,7 @@ pub fn setup(
     let mut dir_io = pins.gpio12;
     let mut dir_ck = pins.gpio19;
     let reset = pins.gpio9;
+    let gnd_detect = pins.gpio8.into_pull_up_input();
 
     let _tdi = pins.gpio17;
     let _dir_tdi = pins.gpio23;
@@ -176,6 +179,7 @@ pub fn setup(
     let board_leds = BoardLeds::new(led_red, led_green, led_blue);
     let mut led_manager = LedManager::new(board_leds);
     let host_status_token = led_manager.host_status_token();
+    let target_physically_connected = TargetPhysicallyConnected { pin: gnd_detect };
 
     let dap_hander = dap::create_dap(
         git_version,
@@ -199,6 +203,7 @@ pub fn setup(
         adc,
         translator_power,
         target_power,
+        target_physically_connected,
     )
 }
 
@@ -210,6 +215,18 @@ pub struct AllIOs {
     pub reset: Pin<Gpio9, PushPullOutput>,
     pub vcp_rx: Pin<Gpio21, PushPullOutput>,
     pub vcp_tx: Pin<Gpio20, PushPullOutput>,
+}
+
+
+pub struct TargetPhysicallyConnected {
+    pin: Pin<Gpio8, PullUpInput>,
+}
+
+impl TargetPhysicallyConnected {
+    /// This checks for the target being connected via the GND detect pin.
+    pub fn target_detected(&self) -> bool {
+        matches!(self.pin.is_low(), Ok(true))
+    }
 }
 
 pub struct TargetVccReader {
