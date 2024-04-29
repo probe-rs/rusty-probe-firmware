@@ -7,8 +7,8 @@ This firmware implements an CMSIS-DAP v1 and v2 compatible probe.
 You can build the project and generate a `.uf2` file as follows:
 
 ```console
-# Install elf2uf2-rs
-cargo install elf2uf2-rs
+# Install elf2uf2-rs and flip-link (you only need to do this once)
+cargo install elf2uf2-rs flip-link
 
 # Build the ELF without logging
 DEFMT_LOG=off cargo build --release --bin app
@@ -28,8 +28,8 @@ To do so, start the probe in the USB bootloader by powering it on while holding 
 Then, perform the following steps:
 
 ```console
-# Install elf2uf2-rs and defmt-print (you only need to do this once)
-cargo install elf2uf2-rs defmt-print
+# Install elf2uf2-rs, flip-link, and defmt-print (you only need to do this once)
+cargo install elf2uf2-rs flip-link defmt-print
 
 # Build the binary with the desired level of logging, and run
 # it using `xtask`
