@@ -7,8 +7,8 @@ This firmware implements an CMSIS-DAP v1 and v2 compatible probe.
 You can build the project and generate a `.uf2` file as follows:
 
 ```console
-# Install elf2uf2-rs
-cargo install elf2uf2-rs
+# Install elf2uf2-rs and flip-link
+cargo install elf2uf2-rs flip-link
 
 # Build the ELF without logging
 DEFMT_LOG=off cargo build --release --bin app
