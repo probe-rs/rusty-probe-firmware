@@ -225,7 +225,10 @@ pub struct TargetPhysicallyConnected {
 impl TargetPhysicallyConnected {
     /// This checks for the target being connected via the GND detect pin.
     pub fn target_detected(&self) -> bool {
-        matches!(self.pin.is_low(), Ok(true))
+        #[cfg(feature = "gnddetect")]
+        return matches!(self.pin.is_low(), Ok(true));
+        #[cfg(not(feature = "gnddetect"))]
+        return true;
     }
 }
 
