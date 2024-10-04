@@ -10,6 +10,7 @@ mod app {
     use pico_probe::{
         leds::{LedManager, Vtarget},
         setup::*,
+        uart::Config as UartConfig,
     };
     use rp2040_hal::usb::UsbBus;
     use usb_device::class_prelude::*;
@@ -23,6 +24,7 @@ mod app {
 
     #[local]
     struct Local {
+        uart: Uart,
         dap_handler: DapHandler,
         target_vcc: TargetVccReader,
         translator_power: TranslatorPower,
@@ -38,12 +40,15 @@ mod app {
         let (
             leds,
             probe_usb,
+            mut uart,
             dap_handler,
             target_vcc,
             translator_power,
             target_power,
             target_physically_connected,
         ) = setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
+
+        uart.configure(UartConfig::default());
 
         voltage_translator_control::spawn().ok();
 
@@ -55,6 +60,7 @@ mod app {
         (
             Shared { probe_usb },
             Local {
+                uart,
                 dap_handler,
                 target_vcc,
                 translator_power,
@@ -147,5 +153,19 @@ mod app {
                 }
             }
         });
+    }
+
+    #[task(binds = UART1_IRQ, priority = 2, shared = [probe_usb], local = [uart])]
+    fn on_uart_rx(ctx: on_uart_rx::Context) {
+        let mut probe_usb = ctx.shared.probe_usb;
+        let uart = ctx.local.uart;
+
+        let mut uart_buf = [0u8; 32];
+        let read_size = uart.read(&mut uart_buf);
+        if read_size > 0 {
+            probe_usb.lock(|probe_usb| {
+                probe_usb.serial_write(&uart_buf[..read_size]);
+            });
+        }
     }
 }

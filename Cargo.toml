@@ -29,7 +29,7 @@ rp2040-boot2 = "0.2.1"
 defmt-brtt = { version = "0.1.0", default-features = false }
 # We don't need bbqueue directly, but we need to activate the
 # thumbv6 feature on it so it will compile.
-bbqueue = { version = "0.5", features = ["thumbv6"], optional = true }
+bbqueue = { version = "0.5", features = ["thumbv6"] }
 
 [features]
 default = [ "defmt-brtt/rtt", "gnddetect" ]

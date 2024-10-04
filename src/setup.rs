@@ -33,6 +33,9 @@ pub type DapHandler = dap_rs::dap::Dap<'static, Context, HostStatusToken, Wait, 
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
+type UartPins = (Pin<Gpio20, rp2040_hal::gpio::FunctionUart>, Pin<Gpio21, rp2040_hal::gpio::FunctionUart>);
+pub type Uart = crate::uart::Uart<pac::UART1, UartPins>;
+
 #[inline(always)]
 pub fn setup(
     pac: pac::Peripherals,
@@ -42,6 +45,7 @@ pub fn setup(
 ) -> (
     LedManager,
     ProbeUsb,
+    Uart,
     DapHandler,
     TargetVccReader,
     TranslatorPower,
@@ -94,6 +98,10 @@ pub fn setup(
 
     let sio = Sio::new(pac.SIO);
     let pins = Pins::new(pac.IO_BANK0, pac.PADS_BANK0, sio.gpio_bank0, &mut resets);
+
+    let uart = Uart::new(pac.UART1, (pins.gpio20.into_mode(), pins.gpio21.into_mode()), clocks.peripheral_clock.freq(), &mut resets);
+    let _dir_vcp_rx = pins.gpio25.into_push_pull_output_in_state(false.into());
+    let _dir_vcp_tx = pins.gpio24.into_push_pull_output_in_state(true.into());
 
     let mut led_green = pins.gpio27.into_push_pull_output();
     led_green.set_high().ok();
@@ -158,10 +166,8 @@ pub fn setup(
     let _tdi = pins.gpio17;
     let _dir_tdi = pins.gpio23;
 
-    let _vcp_rx = pins.gpio21;
-    let _vcp_tx = pins.gpio20;
-    let _dir_vcp_rx = pins.gpio25;
-    let _dir_vcp_tx = pins.gpio24;
+    // let _vcp_rx = pins.gpio21;
+    // let _vcp_tx = pins.gpio20;
 
     // High speed IO
     io.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
@@ -199,6 +205,7 @@ pub fn setup(
     (
         led_manager,
         probe_usb,
+        uart,
         dap_hander,
         adc,
         translator_power,
