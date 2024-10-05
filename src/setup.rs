@@ -4,7 +4,7 @@ use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use dap_rs::usb_device::class_prelude::UsbBusAllocator;
-use embedded_hal::digital::OutputPin;
+use embedded_hal::digital::{InputPin, OutputPin};
 use embedded_hal::pwm::SetDutyCycle;
 use embedded_hal_02::adc::OneShot;
 use rp2040_hal::adc::AdcPin;
@@ -13,8 +13,8 @@ use rp2040_hal::gpio::bank0::{
     Gpio9,
 };
 use rp2040_hal::gpio::{
-    DynFunction, DynPullType, DynSioConfig, FunctionSio, FunctionSioInput, FunctionSioOutput,
-    PullDown, PullNone, SioInput, SioOutput,
+    DynFunction, DynPullType, FunctionSio, FunctionSioInput, FunctionSioOutput, PinId, PullDown,
+    PullNone, PullUp, SioInput, SioOutput, ValidFunction,
 };
 use rp2040_hal::{
     clocks::init_clocks_and_plls,
@@ -26,11 +26,12 @@ use rp2040_hal::{
     watchdog::Watchdog,
     Adc, Clock, Sio,
 };
-use rtic_monotonics::rp2040;
+use rtic_monotonics::rp2040::prelude::*;
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
 pub type DapHandler = dap_rs::dap::Dap<'static, Context, HostStatusToken, Wait, Jtag, Swd, Swo>;
+rp2040_timer_monotonic!(Mono);
 
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.
@@ -113,7 +114,7 @@ pub fn setup(
     // let mut temperature_sensor = adc.enable_temp_sensor();
 
     // Configure GPIO26 as an ADC input
-    let adc_pin_0 = AdcPin::new(pins.gpio26.into_floating_input());
+    let adc_pin_0 = AdcPin::new(pins.gpio26.into_floating_input()).expect("Not an ADC pin");
 
     let adc = TargetVccReader {
         pin: adc_pin_0,
@@ -195,8 +196,7 @@ pub fn setup(
         host_status_token,
     );
 
-    let timer_token = rtic_monotonics::create_rp2040_monotonic_token!();
-    rp2040::Timer::start(pac.TIMER, &mut resets, timer_token);
+    Mono::start(pac.TIMER, &mut resets);
 
     (
         led_manager,
@@ -207,6 +207,68 @@ pub fn setup(
         target_power,
     )
 }
+
+// Keep for future, maybe we don't need `DynPin`?
+//
+// fn testing(mut p: Pin<Gpio10, FunctionSioOutput, PullUp>) {
+//     let a: Pin<Gpio10, FunctionSioInput, PullUp> = p.into_pull_up_input();
+// }
+//
+// pub enum DynPin<P>
+// where
+//     P: PinId,
+// {
+//     Input(Pin<P, FunctionSioInput, PullDown>),
+//     Output(Pin<P, FunctionSioOutput, PullDown>),
+// }
+//
+// impl<P> DynPin<P>
+// where
+//     P: ValidFunction<FunctionSio<SioInput>>,
+//     P: ValidFunction<FunctionSio<SioOutput>>,
+// {
+//     pub fn into_input(self) -> Self {
+//         match self {
+//             DynPin::Input(_) => self,
+//             DynPin::Output(o) => DynPin::Input(o.into_pull_down_input()),
+//         }
+//     }
+//
+//     pub fn into_output(self) -> Self {
+//         match self {
+//             DynPin::Input(i) => DynPin::Output(i.into_push_pull_output()),
+//             DynPin::Output(_) => self,
+//         }
+//     }
+//
+//     pub fn set_high(&mut self) {
+//         match self {
+//             DynPin::Input(_) => defmt::panic!("Output operation on input pin"),
+//             DynPin::Output(o) => {
+//                 o.set_high().ok();
+//             }
+//         }
+//     }
+//
+//     pub fn set_low(&mut self) {
+//         match self {
+//             DynPin::Input(_) => defmt::panic!("Output operation on input pin"),
+//             DynPin::Output(o) => {
+//                 o.set_high().ok();
+//             }
+//         }
+//     }
+//
+//     pub fn is_high(&mut self) -> bool {
+//         match self {
+//             DynPin::Input(i) => i.is_high().unwrap(),
+//             DynPin::Output(_) => {
+//                 defmt::panic!("Input operation on output pin");
+//             }
+//         }
+//     }
+// }
+//
 
 pub struct AllIOs {
     pub io: Pin<Gpio10, DynFunction, DynPullType>,
@@ -251,7 +313,7 @@ impl TranslatorPower {
         // Output channel B on PWM2 to GPIO 5
         let channel = &mut vtranslator_pwm.channel_b;
         channel.output_to(vtranslator_pin);
-        channel.set_duty_cycle(1023);
+        channel.set_duty_cycle(1023).unwrap();
 
         Self { vtranslator_pwm }
     }
@@ -274,7 +336,7 @@ impl TranslatorPower {
         let cnt = ((vomax - vomin - mv_diff) * limit_diff) / (vomax - vomin) + v33;
 
         let channel = &mut self.vtranslator_pwm.channel_b;
-        channel.set_duty_cycle(cnt as u16);
+        channel.set_duty_cycle(cnt as u16).unwrap();
     }
 }
 
@@ -340,6 +402,6 @@ impl TargetPower {
         let cnt = ((vomax - vomin - mv_diff) * limit_diff) / (vomax - vomin) + v33;
 
         let channel = &mut self.vtgt_pwm.channel_a;
-        channel.set_duty_cycle(cnt as u16);
+        channel.set_duty_cycle(cnt as u16).unwrap();
     }
 }

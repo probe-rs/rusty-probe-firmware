@@ -7,8 +7,8 @@ use embedded_hal::{
 };
 
 use rp2040_hal::gpio::{
-    AnyPin, DynFunction, DynPinId, DynPullType, FunctionSio, FunctionSioInput, FunctionSioOutput,
-    Pin, PullDown, SioOutput, SpecificPin,
+    DynFunction, DynPinId, DynPullType, DynSioConfig, FunctionSio, FunctionSioOutput, Pin,
+    SioOutput,
 };
 
 pub struct Context {
@@ -58,7 +58,7 @@ impl Context {
         // self.swdio.into_pull_down_input();
 
         self.swdio
-            .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Input))
+            .try_set_function(DynFunction::Sio(DynSioConfig::Input))
             .ok();
     }
 
@@ -66,7 +66,7 @@ impl Context {
         defmt::trace!("SWDIO -> output");
         //self.swdio.into_push_pull_output();
         self.swdio
-            .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Output))
+            .try_set_function(DynFunction::Sio(DynSioConfig::Output))
             .ok();
         self.swdio.set_high().ok();
         self.dir_swdio.set_high().ok();
@@ -77,14 +77,14 @@ impl Context {
         self.dir_swclk.set_low().ok();
         //self.swclk.into_pull_down_input();
         self.swclk
-            .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Input))
+            .try_set_function(DynFunction::Sio(DynSioConfig::Input))
             .ok();
     }
 
     fn swclk_to_output(&mut self) {
         defmt::trace!("SWCLK -> output");
         self.swclk
-            .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Output))
+            .try_set_function(DynFunction::Sio(DynSioConfig::Output))
             .ok();
         //self.swclk.into_push_pull_output();
         self.swclk.set_high().ok();
@@ -153,13 +153,13 @@ impl swj::Dependencies<Swd, Jtag> for Context {
                 //self.nreset.into_pull_up_input();
 
                 self.nreset
-                    .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Input))
+                    .try_set_function(DynFunction::Sio(DynSioConfig::Input))
                     .ok();
                 self.nreset.set_pull_type(DynPullType::Up);
             } else {
                 //self.nreset.into_push_pull_output();
                 self.nreset
-                    .try_set_function(DynFunction::Sio(rp2040_hal::gpio::DynSioConfig::Output))
+                    .try_set_function(DynFunction::Sio(DynSioConfig::Output))
                     .ok();
                 self.nreset.set_pull_type(DynPullType::Down);
                 self.nreset.set_low().ok();
@@ -529,7 +529,7 @@ impl Wait {
 
 impl DelayNs for Wait {
     fn delay_ns(&mut self, ns: u32) {
-        self.delay.delay_ns(ns);
+        self.delay.delay_us((ns / 1_000).max(1));
     }
 }
 

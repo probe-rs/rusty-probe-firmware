@@ -5,8 +5,12 @@ use core::task::Poll;
 
 use dap_rs::dap::DapLeds;
 use embedded_hal::digital::OutputPin;
-use rp2040_hal::gpio::{bank0::*, DynPullType, FunctionSio, Pin, PullDown, SioOutput};
+use rp2040_hal::gpio::{bank0::*, FunctionSio, Pin, PullDown, SioOutput};
 use rtic_common::waker_registration::CriticalSectionWakerRegistration;
+use rtic_monotonics::fugit::ExtU64;
+use rtic_monotonics::Monotonic;
+
+use crate::setup::Mono;
 
 #[derive(Debug, Clone, Copy, PartialEq, defmt::Format)]
 enum HostStatus {
@@ -270,7 +274,6 @@ impl LedManager {
 
             // Wait for a little bit so the status can actually be seen, unless
             // it changes to another non-idle state.
-            use rtic_monotonics::rp2040::{ExtU64, Timer};
 
             let wait_for_nonactive_status = async {
                 loop {
@@ -284,7 +287,7 @@ impl LedManager {
             };
             pin_mut!(wait_for_nonactive_status);
 
-            let timeout = Timer::delay(100.millis());
+            let timeout = Mono::delay(100.millis());
             pin_mut!(timeout);
 
             select(wait_for_nonactive_status, timeout).await;

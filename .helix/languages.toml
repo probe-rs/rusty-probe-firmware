@@ -1,8 +1,6 @@
 [[language]]
 name = "rust"
 
-[language.config]
+[language-server.rust-analyzer.config]
 rust-analyzer.checkOnSave.allTargets = false
-rust-analyzer.checkOnSave.extraArgs = [
-    "--bins"
-]
+rust-analyzer.checkOnSave.extraArgs = ["--bins"]

@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(type_alias_impl_trait)]
 
 use pico_probe as _;
 
@@ -13,8 +12,7 @@ mod app {
         setup::*,
     };
     use rp2040_hal::usb::UsbBus;
-
-    use rtic_monotonics::rp2040::{ExtU64, Timer};
+    use rtic_monotonics::rp2040::prelude::*;
 
     #[shared]
     struct Shared {
@@ -77,7 +75,7 @@ mod app {
                 LedManager::set_current_vtarget(None);
             };
 
-            Timer::delay(100.millis()).await;
+            Mono::delay(100.millis()).await;
         }
     }
 
@@ -87,7 +85,7 @@ mod app {
             ctx.shared
                 .probe_usb
                 .lock(|probe_usb| probe_usb.flush_logs());
-            Timer::delay(100.millis()).await;
+            Mono::delay(100.millis()).await;
         }
     }
 

@@ -1,3 +1,4 @@
+use core::ptr::addr_of;
 use cortex_m::interrupt;
 use rp2040_hal::pac;
 use rp2040_hal::rom_data;
@@ -17,7 +18,7 @@ pub fn device_id_hex() -> &'static str {
                 }
             }
         });
-        core::str::from_utf8_unchecked(&DEVICE_ID_STR)
+        core::str::from_utf8_unchecked(&*addr_of!(DEVICE_ID_STR))
     }
 }
 
@@ -26,7 +27,7 @@ pub fn device_id_hex() -> &'static str {
 unsafe fn set_cs(level: bool) {
     (&*pac::IO_QSPI::ptr())
         .gpio_qspiss()
-        .gpio_ctrl
+        .gpio_ctrl()
         .modify(|_, w| {
             if level {
                 w.outover().high()
@@ -59,11 +60,11 @@ unsafe fn do_flash_cmd(txrxbuf: &mut [u8]) {
     let ssi = &*pac::XIP_SSI::ptr();
 
     for b in txrxbuf {
-        while !ssi.sr.read().tfnf().bit_is_set() {}
-        ssi.dr0.write(|w| w.dr().bits(*b as _));
+        while !ssi.sr().read().tfnf().bit_is_set() {}
+        ssi.dr0().write(|w| w.dr().bits(*b as _));
 
-        while !ssi.sr.read().rfne().bit_is_set() {}
-        *b = ssi.dr0.read().dr().bits() as _;
+        while !ssi.sr().read().rfne().bit_is_set() {}
+        *b = ssi.dr0().read().dr().bits() as _;
     }
 
     set_cs(true);
