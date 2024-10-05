@@ -219,6 +219,10 @@ mod app {
 
                 if let Some(mut grant) = uart.try_grant_write(64) {
                     let used = probe_usb.serial_read(&mut grant);
+                    #[cfg(feature = "usb-serial-reboot")]
+                    if &grant[..read_data] == &0xDABAD000u32.to_be_bytes() {
+                        rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
+                    }
                     grant.commit(used);
                     if used > 0 {
                         uart.flush_write_buffer();
