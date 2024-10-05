@@ -57,11 +57,11 @@ impl<D: uart::UartDevice, P: uart::ValidUartPinout<D>> Uart<D, P> {
     pub fn flush_write_buffer(&mut self) {
         if let Some(Device::Enabled(uart)) = self.device.as_mut() {
             if let Ok(grant) = self.write_buffer_consumer.split_read() {
-                let written = uart.write_raw(grant.bufs().0).unwrap_or(&[]);
-                let mut used = written.len();
-                if written.len() == grant.bufs().0.len() {
-                    let written = uart.write_raw(grant.bufs().1).unwrap_or(&[]);
-                    used += written.len();
+                let unused = uart.write_raw(grant.bufs().0).unwrap_or(grant.bufs().0);
+                let mut used = grant.bufs().0.len() - unused.len();
+                if unused.len() == 0 {
+                    let unused = uart.write_raw(grant.bufs().1).unwrap_or(grant.bufs().1);
+                    used += grant.bufs().1.len() - unused.len();
                 }
 
                 if used < grant.combined_len() {
