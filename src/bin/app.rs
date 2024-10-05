@@ -20,11 +20,11 @@ mod app {
     #[shared]
     struct Shared {
         probe_usb: pico_probe::usb::ProbeUsb,
+        uart: Uart,
     }
 
     #[local]
     struct Local {
-        uart: Uart,
         dap_handler: DapHandler,
         target_vcc: TargetVccReader,
         translator_power: TranslatorPower,
@@ -58,9 +58,8 @@ mod app {
         led_driver::spawn(leds).ok();
 
         (
-            Shared { probe_usb },
+            Shared { probe_usb, uart },
             Local {
-                uart,
                 dap_handler,
                 target_vcc,
                 translator_power,
@@ -121,9 +120,10 @@ mod app {
         }
     }
 
-    #[task(binds = USBCTRL_IRQ, priority = 2, shared = [ probe_usb ], local = [dap_handler, resp_buf: [u8; 64] = [0; 64]])]
+    #[task(binds = USBCTRL_IRQ, priority = 2, shared = [ probe_usb, uart ], local = [dap_handler, resp_buf: [u8; 64] = [0; 64]])]
     fn on_usb(ctx: on_usb::Context) {
         let mut probe_usb = ctx.shared.probe_usb;
+        let mut uart = ctx.shared.uart;
         let dap = ctx.local.dap_handler;
         let resp_buf = ctx.local.resp_buf;
 
@@ -152,20 +152,34 @@ mod app {
                     }
                 }
             }
+
+            uart.lock(|uart| {
+                if let Some(mut grant) = uart.try_grant_write(64) {
+                    let used = probe_usb.serial_read(&mut grant);
+                    grant.commit(used);
+                    if used > 0 {
+                        uart.flush_write_buffer();
+                    }
+                }
+            });
         });
     }
 
-    #[task(binds = UART1_IRQ, priority = 2, shared = [probe_usb], local = [uart])]
-    fn on_uart_rx(ctx: on_uart_rx::Context) {
+    #[task(binds = UART1_IRQ, priority = 2, shared = [probe_usb, uart])]
+    fn on_uart(ctx: on_uart::Context) {
         let mut probe_usb = ctx.shared.probe_usb;
-        let uart = ctx.local.uart;
+        let mut uart = ctx.shared.uart;
 
-        let mut uart_buf = [0u8; 32];
-        let read_size = uart.read(&mut uart_buf);
-        if read_size > 0 {
-            probe_usb.lock(|probe_usb| {
-                probe_usb.serial_write(&uart_buf[..read_size]);
-            });
-        }
+        uart.lock(|uart| {
+            let mut uart_buf = [0u8; 32];
+            let read_size = uart.read(&mut uart_buf);
+            if read_size > 0 {
+                probe_usb.lock(|probe_usb| {
+                    probe_usb.serial_write(&uart_buf[..read_size]);
+                });
+            }
+
+            uart.flush_write_buffer();
+        });
     }
 }

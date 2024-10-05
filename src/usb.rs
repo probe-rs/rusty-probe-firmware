@@ -63,6 +63,10 @@ impl ProbeUsb {
         }
     }
 
+    pub fn serial_read(&mut self, data: &mut [u8]) -> usize {
+        self.serial.read(data).unwrap_or(0)
+    }
+
     pub fn flush_logs(&mut self) {
         #[cfg(feature = "defmt-bbq")]
         {
