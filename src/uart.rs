@@ -36,6 +36,8 @@ impl<D: uart::UartDevice, P: uart::ValidUartPinout<D>> Uart<D, P> {
             Device::Enabled(device) => device.disable(),
         };
 
+        defmt::info!("configure uart: {}bps", config.baudrate.raw());
+
         let mut device = disabled_device.enable(config, self.peripheral_freq).expect("failed to enable the uart peripheral");
         device.set_fifos(true);
         device.enable_rx_interrupt();

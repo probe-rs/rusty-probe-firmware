@@ -67,6 +67,10 @@ impl ProbeUsb {
         self.serial.read(data).unwrap_or(0)
     }
 
+    pub fn serial_line_coding(&self) -> &usbd_serial::LineCoding {
+        self.serial.line_coding()
+    }
+
     pub fn flush_logs(&mut self) {
         #[cfg(feature = "defmt-bbq")]
         {

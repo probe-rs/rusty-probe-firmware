@@ -15,7 +15,60 @@ mod app {
     use rp2040_hal::usb::UsbBus;
     use usb_device::class_prelude::*;
 
-    use rtic_monotonics::rp2040::{ExtU64, Timer};
+    use rtic_monotonics::rp2040::{fugit::RateExtU32, ExtU64, Timer};
+
+    struct UsbUartState {
+        data_rate: u32,
+        data_bits: u8,
+        stop_bits: usbd_serial::StopBits,
+        parity_type: usbd_serial::ParityType,
+    }
+
+    impl PartialEq<usbd_serial::LineCoding> for UsbUartState {
+        fn eq(&self, other: &usbd_serial::LineCoding) -> bool {
+            self.data_bits == other.data_bits() &&
+                self.data_rate == other.data_rate() &&
+                self.parity_type == other.parity_type() &&
+                self.stop_bits == other.stop_bits()
+        }
+    }
+
+    impl UsbUartState {
+        pub fn new(line_coding: &usbd_serial::LineCoding) -> Self {
+            Self {
+                data_rate: line_coding.data_rate(),
+                data_bits: line_coding.data_bits(),
+                stop_bits: line_coding.stop_bits(),
+                parity_type: line_coding.parity_type(),
+            }
+        }
+
+        pub fn try_get_uart_config(&self) -> Option<rp2040_hal::uart::UartConfig> {
+            let data_bits = match self.data_bits {
+                5 => Some(rp2040_hal::uart::DataBits::Five),
+                6 => Some(rp2040_hal::uart::DataBits::Six),
+                7 => Some(rp2040_hal::uart::DataBits::Seven),
+                8 => Some(rp2040_hal::uart::DataBits::Eight),
+                _ => None,
+            }?;
+            let parity = match self.parity_type {
+                // "Event" is probably a typo
+                usbd_serial::ParityType::Event => Some(Some(rp2040_hal::uart::Parity::Even)),
+                usbd_serial::ParityType::Odd => Some(Some(rp2040_hal::uart::Parity::Odd)),
+                usbd_serial::ParityType::None => Some(None),
+                _ => None,
+            }?;
+            let stop_bits = match self.stop_bits {
+                usbd_serial::StopBits::One => Some(rp2040_hal::uart::StopBits::One),
+                usbd_serial::StopBits::Two => Some(rp2040_hal::uart::StopBits::Two),
+                _ => None
+            }?;
+            
+            Some(rp2040_hal::uart::UartConfig::new(
+                self.data_rate.Hz(),
+                data_bits, parity, stop_bits))
+        }
+    }
 
     #[shared]
     struct Shared {
@@ -30,6 +83,7 @@ mod app {
         translator_power: TranslatorPower,
         target_power: TargetPower,
         target_physically_connected: TargetPhysicallyConnected,
+        uart_state: Option<UsbUartState>,
     }
 
     #[init(local = [
@@ -65,6 +119,7 @@ mod app {
                 translator_power,
                 target_power,
                 target_physically_connected,
+                uart_state: None,
             },
         )
     }
@@ -120,12 +175,13 @@ mod app {
         }
     }
 
-    #[task(binds = USBCTRL_IRQ, priority = 2, shared = [ probe_usb, uart ], local = [dap_handler, resp_buf: [u8; 64] = [0; 64]])]
+    #[task(binds = USBCTRL_IRQ, priority = 2, shared = [ probe_usb, uart ], local = [dap_handler, uart_state, resp_buf: [u8; 64] = [0; 64]])]
     fn on_usb(ctx: on_usb::Context) {
         let mut probe_usb = ctx.shared.probe_usb;
         let mut uart = ctx.shared.uart;
         let dap = ctx.local.dap_handler;
         let resp_buf = ctx.local.resp_buf;
+        let uart_state = ctx.local.uart_state;
 
         probe_usb.lock(|probe_usb| {
             if let Some(request) = probe_usb.interrupt() {
@@ -154,6 +210,13 @@ mod app {
             }
 
             uart.lock(|uart| {
+                if uart_state.as_ref().map_or(true, |uart_state| !uart_state.eq(probe_usb.serial_line_coding())) {
+                    *uart_state = Some(UsbUartState::new(probe_usb.serial_line_coding()));
+                    if let Some(uart_config) = uart_state.as_ref().unwrap().try_get_uart_config() {
+                        uart.configure(uart_config);
+                    }
+                }
+
                 if let Some(mut grant) = uart.try_grant_write(64) {
                     let used = probe_usb.serial_read(&mut grant);
                     grant.commit(used);
