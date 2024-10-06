@@ -102,8 +102,6 @@ impl ProbeUsb {
                 return Some(Request::Suspend);
             }
 
-            // self.flush_serial_buffers();
-
             let r = self.dap_v1.process();
             if r.is_some() {
                 return r;
@@ -116,28 +114,6 @@ impl ProbeUsb {
         }
         None
     }
-
-    // pub fn flush_serial_buffers(&mut self) {
-    //     if self.device.state() == UsbDeviceState::Configured {
-    //         if let Ok(grant) = self.serial_consumer.read() {
-    //             if let Ok(write_size) = self.serial.write(&grant) {
-    //                 grant.release(write_size);
-    //             }
-    //         }
-    //     }
-
-    //     if let Ok(mut grant) = self.serial_producer.grant_max_remaining(64) {
-    //         if let Ok(read_size) = self.serial.read(&mut grant) {
-    //             #[cfg(feature = "usb-serial-reboot")]
-    //             if &grant[..read_data] == &0xDABAD000u32.to_be_bytes() {
-    //                 rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
-    //             }
-    //             if self.device.state() == UsbDeviceState::Configured {
-    //                 grant.commit(read_size);
-    //             }
-    //         }
-    //     }
-    // }
 
     /// Transmit a DAP report back over the DAPv1 HID interface
     pub fn dap1_reply(&mut self, data: &[u8]) {
