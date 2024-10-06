@@ -94,15 +94,13 @@ mod app {
         let (
             leds,
             probe_usb,
-            mut uart,
+            uart,
             dap_handler,
             target_vcc,
             translator_power,
             target_power,
             target_physically_connected,
         ) = setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
-
-        uart.configure(UartConfig::default());
 
         voltage_translator_control::spawn().ok();
 
