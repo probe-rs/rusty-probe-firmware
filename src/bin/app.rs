@@ -10,7 +10,6 @@ mod app {
     use pico_probe::{
         leds::{LedManager, Vtarget},
         setup::*,
-        uart::Config as UartConfig,
     };
     use rp2040_hal::usb::UsbBus;
     use usb_device::class_prelude::*;
@@ -215,22 +214,14 @@ mod app {
                     }
                 }
 
-                if let Some(mut grant) = uart.try_grant_write(64) {
-                    let used = probe_usb.serial_read(&mut grant);
-                    #[cfg(feature = "usb-serial-reboot")]
-                    if &grant[..read_data] == &0xDABAD000u32.to_be_bytes() {
-                        rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
-                    }
-                    grant.commit(used);
-                    if used > 0 {
-                        uart.flush_write_buffer();
-                    }
+                if buffer_uart_tx_data(probe_usb, uart) > 0 {
+                    uart.flush_write_buffer();
                 }
             });
         });
     }
 
-    #[task(binds = UART1_IRQ, priority = 2, shared = [probe_usb, uart])]
+    #[task(binds = UART1_IRQ, priority = 3, shared = [probe_usb, uart])]
     fn on_uart(ctx: on_uart::Context) {
         let mut probe_usb = ctx.shared.probe_usb;
         let mut uart = ctx.shared.uart;
@@ -238,19 +229,29 @@ mod app {
         uart.lock(|uart| {
             let mut uart_buf = [0u8; 32];
             let read_size = uart.read(&mut uart_buf);
-            if read_size > 0 {
-                probe_usb.lock(|probe_usb| {
+            probe_usb.lock(|probe_usb| {
+                if read_size > 0 {
                     probe_usb.serial_write(&uart_buf[..read_size]);
-                });
-            }
+                }
 
-            if let Some(mut grant) = uart.try_grant_write(64) {
-                probe_usb.lock(|probe_usb| {
-                    let read_size = probe_usb.serial_read(&mut grant);
-                    grant.commit(read_size);
-                });
-            }
+                buffer_uart_tx_data(probe_usb, uart);
+            });
+
             uart.flush_write_buffer();
         });
+    }
+
+    fn buffer_uart_tx_data(probe_usb: &mut pico_probe::usb::ProbeUsb, uart: &mut Uart) -> usize {
+        if let Some(mut grant) = uart.try_grant_write(64) {
+            let used = probe_usb.serial_read(&mut grant);
+            #[cfg(feature = "usb-serial-reboot")]
+            if grant.len() >= 4 && &grant[..read_data] == &0xDABAD000u32.to_be_bytes() {
+                rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
+            }
+            grant.commit(used);
+            used
+        } else {
+            0
+        }
     }
 }
