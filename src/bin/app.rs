@@ -244,6 +244,12 @@ mod app {
                 });
             }
 
+            if let Some(mut grant) = uart.try_grant_write(64) {
+                probe_usb.lock(|probe_usb| {
+                    let read_size = probe_usb.serial_read(&mut grant);
+                    grant.commit(read_size);
+                });
+            }
             uart.flush_write_buffer();
         });
     }
