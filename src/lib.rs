@@ -13,6 +13,7 @@ pub mod leds;
 pub mod pio;
 pub mod setup;
 pub mod systick_delay;
+pub mod uart;
 pub mod usb;
 
 defmt::timestamp! {"{=u64:us}", {

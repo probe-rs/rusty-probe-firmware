@@ -55,6 +55,22 @@ impl ProbeUsb {
         }
     }
 
+    pub fn serial_write(&mut self, data: &[u8]) -> usize {
+        if self.device.state() == UsbDeviceState::Configured && self.serial.dtr() {
+            self.serial.write(data).unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    pub fn serial_read(&mut self, data: &mut [u8]) -> usize {
+        self.serial.read(data).unwrap_or(0)
+    }
+
+    pub fn serial_line_coding(&self) -> &usbd_serial::LineCoding {
+        self.serial.line_coding()
+    }
+
     pub fn flush_logs(&mut self) {
         #[cfg(feature = "defmt-bbq")]
         {
@@ -84,17 +100,6 @@ impl ProbeUsb {
 
             if (old_state != new_state) && (new_state != UsbDeviceState::Configured) {
                 return Some(Request::Suspend);
-            }
-
-            // Discard data from the serial interface
-            let mut buf = [0; 64 as usize];
-            let _read_data = self.serial.read(&mut buf);
-
-            #[cfg(feature = "usb-serial-reboot")]
-            if let Ok(read_data) = _read_data {
-                if &buf[..read_data] == &0xDABAD000u32.to_be_bytes() {
-                    rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
-                }
             }
 
             let r = self.dap_v1.process();
