@@ -206,8 +206,9 @@ mod app {
                 }
             }
 
+            let uart_state_changed = uart_state.as_ref().map_or(true, |uart_state| !uart_state.eq(probe_usb.serial_line_coding()));
             uart.lock(|uart| {
-                if uart_state.as_ref().map_or(true, |uart_state| !uart_state.eq(probe_usb.serial_line_coding())) {
+                if uart_state_changed {
                     *uart_state = Some(UsbUartState::new(probe_usb.serial_line_coding()));
                     if let Some(uart_config) = uart_state.as_ref().unwrap().try_get_uart_config() {
                         uart.configure(uart_config);
@@ -245,7 +246,7 @@ mod app {
         if let Some(mut grant) = uart.try_grant_write(64) {
             let used = probe_usb.serial_read(&mut grant);
             #[cfg(feature = "usb-serial-reboot")]
-            if grant.len() >= 4 && &grant[..read_data] == &0xDABAD000u32.to_be_bytes() {
+            if grant.len() >= 4 && &grant[..used] == &0xDABAD000u32.to_be_bytes() {
                 rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
             }
             grant.commit(used);
