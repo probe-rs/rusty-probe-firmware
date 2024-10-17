@@ -1,11 +1,13 @@
-use crate::systick_delay::Delay;
+use crate::{
+    setup::{DirSwclkPin, DirSwdioPin, ResetPin, SwclkPin, SwdioPin},
+    systick_delay::Delay,
+};
 use dap_rs::{swj::Dependencies, *};
 use defmt::trace;
 use embedded_hal::{
-    blocking::delay::DelayUs,
-    digital::v2::{InputPin, OutputPin, PinState},
+    delay::DelayNs,
+    digital::{OutputPin, PinState},
 };
-use rp2040_hal::gpio::DynPin;
 
 pub struct Context {
     max_frequency: u32,
@@ -13,11 +15,11 @@ pub struct Context {
     cycles_per_us: u32,
     half_period_ticks: u32,
     delay: &'static Delay,
-    swdio: DynPin,
-    swclk: DynPin,
-    nreset: DynPin,
-    dir_swdio: DynPin,
-    dir_swclk: DynPin,
+    swdio: SwdioPin,
+    swclk: SwclkPin,
+    nreset: ResetPin,
+    dir_swdio: DirSwdioPin,
+    dir_swclk: DirSwclkPin,
 }
 
 impl defmt::Format for Context {
@@ -49,41 +51,36 @@ impl Context {
     fn swdio_to_input(&mut self) {
         defmt::trace!("SWDIO -> input");
         self.dir_swdio.set_low().ok();
-        self.swdio.into_pull_down_input();
+        self.swdio.into_input();
     }
 
     fn swdio_to_output(&mut self) {
         defmt::trace!("SWDIO -> output");
-        self.swdio.into_push_pull_output();
-        self.swdio.set_high().ok();
+        self.swdio.into_output_in_state(PinState::High);
         self.dir_swdio.set_high().ok();
     }
 
     fn swclk_to_input(&mut self) {
         defmt::trace!("SWCLK -> input");
         self.dir_swclk.set_low().ok();
-        self.swclk.into_pull_down_input();
+        self.swclk.into_input();
     }
 
     fn swclk_to_output(&mut self) {
         defmt::trace!("SWCLK -> output");
-        self.swclk.into_push_pull_output();
-        self.swclk.set_high().ok();
+        self.swclk.into_output_in_state(PinState::High);
         self.dir_swclk.set_high().ok();
     }
 
     fn from_pins(
-        swdio: DynPin,
-        swclk: DynPin,
-        nreset: DynPin,
-        mut dir_swdio: DynPin,
-        mut dir_swclk: DynPin,
+        swdio: SwdioPin,
+        swclk: SwclkPin,
+        nreset: ResetPin,
+        mut dir_swdio: DirSwdioPin,
+        mut dir_swclk: DirSwclkPin,
         cpu_frequency: u32,
         delay: &'static Delay,
     ) -> Self {
-        dir_swdio.into_push_pull_output();
-        dir_swclk.into_push_pull_output();
-
         dir_swdio.set_low().ok();
         dir_swclk.set_low().ok();
         defmt::trace!("SWCLK -> input");
@@ -110,43 +107,37 @@ impl swj::Dependencies<Swd, Jtag> for Context {
     fn process_swj_pins(&mut self, output: swj::Pins, mask: swj::Pins, wait_us: u32) -> swj::Pins {
         if mask.contains(swj::Pins::SWCLK) {
             self.swclk_to_output();
-            self.swclk
-                .set_state(if output.contains(swj::Pins::SWCLK) {
-                    PinState::High
-                } else {
-                    PinState::Low
-                })
-                .ok();
+            if output.contains(swj::Pins::SWCLK) {
+                self.swclk.set_high();
+            } else {
+                self.swclk.set_low();
+            }
         }
 
         if mask.contains(swj::Pins::SWDIO) {
             self.swdio_to_output();
-            self.swdio
-                .set_state(if output.contains(swj::Pins::SWDIO) {
-                    PinState::High
-                } else {
-                    PinState::Low
-                })
-                .ok();
+            if output.contains(swj::Pins::SWDIO) {
+                self.swdio.set_high();
+            } else {
+                self.swdio.set_low();
+            }
         }
 
         if mask.contains(swj::Pins::NRESET) {
             if output.contains(swj::Pins::NRESET) {
-                // "open drain"
-                // TODO: What is really "output open drain"?
-                self.nreset.into_pull_up_input();
+                // "open drain disconnect"
+                self.nreset.into_input();
             } else {
-                self.nreset.into_push_pull_output();
-                self.nreset.set_low().ok();
+                self.nreset.into_output_in_state(PinState::Low);
             }
         }
 
         self.delay.delay_ticks(self.cycles_per_us * wait_us);
 
         let mut ret = swj::Pins::empty();
-        ret.set(swj::Pins::SWCLK, matches!(self.swclk.is_high(), Ok(true)));
-        ret.set(swj::Pins::SWDIO, matches!(self.swdio.is_high(), Ok(true)));
-        ret.set(swj::Pins::NRESET, matches!(self.nreset.is_high(), Ok(true)));
+        ret.set(swj::Pins::SWCLK, self.swclk.is_high());
+        ret.set(swj::Pins::SWDIO, self.swdio.is_high());
+        ret.set(swj::Pins::NRESET, self.nreset.is_high());
 
         trace!(
             "Running SWJ_pins: mask {:08b}, output: {:08b}, read: {:08b}",
@@ -174,13 +165,13 @@ impl swj::Dependencies<Swd, Jtag> for Context {
                 let bit = byte & 1;
                 byte >>= 1;
                 if bit != 0 {
-                    self.swdio.set_high().ok();
+                    self.swdio.set_high();
                 } else {
-                    self.swdio.set_low().ok();
+                    self.swdio.set_low();
                 }
-                self.swclk.set_low().ok();
+                self.swclk.set_low();
                 last = self.delay.delay_ticks_from_last(half_period_ticks, last);
-                self.swclk.set_high().ok();
+                self.swclk.set_high();
                 last = self.delay.delay_ticks_from_last(half_period_ticks, last);
             }
             bits -= frame_bits;
@@ -203,7 +194,7 @@ impl swj::Dependencies<Swd, Jtag> for Context {
     fn high_impedance_mode(&mut self) {
         self.swdio_to_input();
         self.swclk_to_input();
-        self.nreset.into_floating_disabled();
+        self.nreset.into_input();
     }
 }
 
@@ -247,7 +238,8 @@ impl From<Context> for Swd {
         // Maybe this should go to some `Swd::new`
         value.swdio_to_output();
         value.swclk_to_output();
-        value.nreset.into_floating_disabled();
+        value.nreset.into_input();
+
         Self(value)
     }
 }
@@ -411,16 +403,16 @@ impl Swd {
     #[inline(always)]
     fn write_bit(&mut self, bit: u8, last: &mut u32) {
         if bit != 0 {
-            self.0.swdio.set_high().ok();
+            self.0.swdio.set_high();
         } else {
-            self.0.swdio.set_low().ok();
+            self.0.swdio.set_low();
         }
 
         let half_period_ticks = self.0.half_period_ticks;
 
-        self.0.swclk.set_low().ok();
+        self.0.swclk.set_low();
         *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
-        self.0.swclk.set_high().ok();
+        self.0.swclk.set_high();
         *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
     }
 
@@ -428,10 +420,10 @@ impl Swd {
     fn read_bit(&mut self, last: &mut u32) -> u8 {
         let half_period_ticks = self.0.half_period_ticks;
 
-        self.0.swclk.set_low().ok();
+        self.0.swclk.set_low();
         *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
-        let bit = matches!(self.0.swdio.is_high(), Ok(true)) as u8;
-        self.0.swclk.set_high().ok();
+        let bit = self.0.swdio.is_high() as u8;
+        self.0.swclk.set_high();
         *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
 
         bit
@@ -497,20 +489,20 @@ impl Wait {
     }
 }
 
-impl DelayUs<u32> for Wait {
-    fn delay_us(&mut self, us: u32) {
-        self.delay.delay_us(us);
+impl DelayNs for Wait {
+    fn delay_ns(&mut self, ns: u32) {
+        self.delay.delay_us((ns / 1_000).max(1));
     }
 }
 
 #[inline(always)]
 pub fn create_dap(
     version_string: &'static str,
-    swdio: DynPin,
-    swclk: DynPin,
-    nreset: DynPin,
-    dir_swdio: DynPin,
-    dir_swclk: DynPin,
+    swdio: SwdioPin,
+    swclk: SwclkPin,
+    nreset: ResetPin,
+    dir_swdio: DirSwdioPin,
+    dir_swclk: DirSwclkPin,
     cpu_frequency: u32,
     delay: &'static Delay,
     leds: crate::leds::HostStatusToken,

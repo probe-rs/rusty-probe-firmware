@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use pico_probe as _;
+use rusty_probe as _;
 
 #[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ])]
 mod app {
@@ -49,7 +49,7 @@ mod app {
         let ck = pins.gpio11;
 
         println!("Starting PIO");
-        pico_probe::pio::setup_pio(&mut resets, cx.device.PIO0, ck, io, io_dir);
+        rusty_probe::pio::setup_pio(&mut resets, cx.device.PIO0, ck, io, io_dir);
         println!("Started PIO");
 
         (Shared {}, Local {})
