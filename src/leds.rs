@@ -5,12 +5,11 @@ use core::task::Poll;
 
 use dap_rs::dap::DapLeds;
 use embedded_hal::digital::OutputPin;
-use rp2040_hal::gpio::{bank0::*, FunctionSio, Pin, PullDown, SioOutput};
 use rtic_common::waker_registration::CriticalSectionWakerRegistration;
 use rtic_monotonics::fugit::ExtU64;
 use rtic_monotonics::Monotonic;
 
-use crate::setup::Mono;
+use crate::setup::{LedBluePin, LedGreenPin, LedRedPin, Mono};
 
 #[derive(Debug, Clone, Copy, PartialEq, defmt::Format)]
 enum HostStatus {
@@ -52,18 +51,14 @@ impl From<NonZeroU8> for HostStatus {
 }
 
 pub struct BoardLeds {
-    green: Pin<Gpio27, FunctionSio<SioOutput>, PullDown>,
-    red: Pin<Gpio28, FunctionSio<SioOutput>, PullDown>,
-    blue: Pin<Gpio29, FunctionSio<SioOutput>, PullDown>,
+    red: LedRedPin,
+    green: LedGreenPin,
+    blue: LedBluePin,
     rgb: (bool, bool, bool),
 }
 
 impl BoardLeds {
-    pub fn new(
-        red: Pin<Gpio28, FunctionSio<SioOutput>, PullDown>,
-        green: Pin<Gpio27, FunctionSio<SioOutput>, PullDown>,
-        blue: Pin<Gpio29, FunctionSio<SioOutput>, PullDown>,
-    ) -> Self {
+    pub fn new(red: LedRedPin, green: LedGreenPin, blue: LedBluePin) -> Self {
         let mut me = Self {
             red,
             green,

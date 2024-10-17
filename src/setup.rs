@@ -10,8 +10,8 @@ use embedded_hal_02::adc::OneShot;
 use replace_with::replace_with_or_abort_unchecked;
 use rp2040_hal::adc::AdcPin;
 use rp2040_hal::gpio::bank0::{
-    Gpio0, Gpio10, Gpio11, Gpio16, Gpio17, Gpio20, Gpio21, Gpio26, Gpio3, Gpio5, Gpio6, Gpio7,
-    Gpio8, Gpio9,
+    Gpio0, Gpio10, Gpio11, Gpio12, Gpio16, Gpio17, Gpio19, Gpio20, Gpio21, Gpio26, Gpio27, Gpio28,
+    Gpio29, Gpio3, Gpio5, Gpio6, Gpio7, Gpio8, Gpio9,
 };
 use rp2040_hal::gpio::{
     FunctionSio, FunctionSioInput, FunctionSioOutput, PinId, PinState, PullDown, PullNone,
@@ -33,6 +33,26 @@ const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
 pub type DapHandler = dap_rs::dap::Dap<'static, Context, HostStatusToken, Wait, Jtag, Swd, Swo>;
 rp2040_timer_monotonic!(Mono);
+
+pub type VTargetPwmPin = Pin<Gpio0, FunctionSioOutput, PullDown>;
+pub type Enable5VKeyPin = Pin<Gpio3, FunctionSioOutput, PullDown>;
+pub type VTranslatorPwmPin = Pin<Gpio5, FunctionSio<SioOutput>, PullDown>;
+pub type EnableVTargetPin = Pin<Gpio6, FunctionSioOutput, PullDown>;
+pub type Enable5VPin = Pin<Gpio7, FunctionSioOutput, PullDown>;
+pub type GndDetectPin = Pin<Gpio8, FunctionSioInput, PullUp>;
+pub type ResetPin = DynPin<Gpio9, PullNone>;
+pub type SwdioPin = DynPin<Gpio10, PullDown>;
+pub type SwclkPin = DynPin<Gpio11, PullDown>;
+pub type DirSwdioPin = Pin<Gpio12, FunctionSioOutput, PullNone>;
+pub type TdoSwoPin = DynPin<Gpio16, PullDown>;
+pub type TdiPin = DynPin<Gpio17, PullDown>;
+pub type DirSwclkPin = Pin<Gpio19, FunctionSioOutput, PullNone>;
+pub type VcpTxPin = DynPin<Gpio20, PullUp>;
+pub type VcpRxPin = DynPin<Gpio21, PullUp>;
+pub type VTargetAdcPin = AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>;
+pub type LedGreenPin = Pin<Gpio27, FunctionSio<SioOutput>, PullDown>;
+pub type LedRedPin = Pin<Gpio28, FunctionSio<SioOutput>, PullDown>;
+pub type LedBluePin = Pin<Gpio29, FunctionSio<SioOutput>, PullDown>;
 
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.
@@ -295,17 +315,17 @@ where
 }
 
 pub struct AllIOs {
-    pub io: DynPin<Gpio10, PullDown>,
-    pub ck: DynPin<Gpio11, PullDown>,
-    pub tdi: DynPin<Gpio17, PullDown>,
-    pub tdo_swo: DynPin<Gpio16, PullDown>,
-    pub reset: DynPin<Gpio9, PullNone>,
-    pub vcp_rx: DynPin<Gpio21, PullUp>,
-    pub vcp_tx: DynPin<Gpio20, PullUp>,
+    pub io: SwdioPin,
+    pub ck: SwclkPin,
+    pub tdi: TdiPin,
+    pub tdo_swo: TdoSwoPin,
+    pub reset: ResetPin,
+    pub vcp_rx: VcpRxPin,
+    pub vcp_tx: VcpTxPin,
 }
 
 pub struct TargetPhysicallyConnected {
-    pin: Pin<Gpio8, FunctionSioInput, PullUp>,
+    pin: GndDetectPin,
 }
 
 impl TargetPhysicallyConnected {
@@ -319,7 +339,7 @@ impl TargetPhysicallyConnected {
 }
 
 pub struct TargetVccReader {
-    pub pin: AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>,
+    pub pin: VTargetAdcPin,
     pub adc: Adc,
 }
 
@@ -338,7 +358,7 @@ pub struct TranslatorPower {
 
 impl TranslatorPower {
     pub fn new(
-        mut vtranslator_pin: Pin<Gpio5, FunctionSio<SioOutput>, PullDown>,
+        mut vtranslator_pin: VTranslatorPwmPin,
         mut vtranslator_pwm: Slice<Pwm2, FreeRunning>,
     ) -> Self {
         vtranslator_pwm.clr_ph_correct();
@@ -379,8 +399,8 @@ impl TranslatorPower {
 }
 
 pub struct TargetPower {
-    enable_5v_key: Pin<Gpio3, FunctionSioOutput, PullDown>,
-    enable_vtgt: Pin<Gpio6, FunctionSioOutput, PullDown>,
+    enable_5v_key: Enable5VKeyPin,
+    enable_vtgt: EnableVTargetPin,
     vtgt_pwm: Slice<Pwm0, FreeRunning>,
 }
 
@@ -394,10 +414,10 @@ impl TargetPower {
     }
 
     pub fn new(
-        mut enable_5v_key: Pin<Gpio3, FunctionSioOutput, PullDown>,
-        mut enable_5v: Pin<Gpio7, FunctionSioOutput, PullDown>,
-        mut enable_vtgt: Pin<Gpio6, FunctionSioOutput, PullDown>,
-        mut vtgt_pin: Pin<Gpio0, FunctionSioOutput, PullDown>,
+        mut enable_5v_key: Enable5VKeyPin,
+        mut enable_5v: Enable5VPin,
+        mut enable_vtgt: EnableVTargetPin,
+        mut vtgt_pin: VTargetPwmPin,
         mut vtgt_pwm: Slice<Pwm0, FreeRunning>,
     ) -> Self {
         // Always enable the protected 5v (existed until rev E of hardware)

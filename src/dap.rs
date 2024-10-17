@@ -1,4 +1,7 @@
-use crate::{setup::DynPin, systick_delay::Delay};
+use crate::{
+    setup::{DirSwclkPin, DirSwdioPin, ResetPin, SwclkPin, SwdioPin},
+    systick_delay::Delay,
+};
 use dap_rs::{swj::Dependencies, *};
 use defmt::trace;
 use embedded_hal::{
@@ -6,19 +9,17 @@ use embedded_hal::{
     digital::{OutputPin, PinState},
 };
 
-use rp2040_hal::gpio::{bank0::*, FunctionSioOutput, Pin, PullDown, PullNone};
-
 pub struct Context {
     max_frequency: u32,
     cpu_frequency: u32,
     cycles_per_us: u32,
     half_period_ticks: u32,
     delay: &'static Delay,
-    swdio: DynPin<Gpio10, PullDown>,
-    swclk: DynPin<Gpio11, PullDown>,
-    nreset: DynPin<Gpio9, PullNone>,
-    dir_swdio: Pin<Gpio12, FunctionSioOutput, PullNone>,
-    dir_swclk: Pin<Gpio19, FunctionSioOutput, PullNone>,
+    swdio: SwdioPin,
+    swclk: SwclkPin,
+    nreset: ResetPin,
+    dir_swdio: DirSwdioPin,
+    dir_swclk: DirSwclkPin,
 }
 
 impl defmt::Format for Context {
@@ -72,11 +73,11 @@ impl Context {
     }
 
     fn from_pins(
-        swdio: DynPin<Gpio10, PullDown>,
-        swclk: DynPin<Gpio11, PullDown>,
-        nreset: DynPin<Gpio9, PullNone>,
-        mut dir_swdio: Pin<Gpio12, FunctionSioOutput, PullNone>,
-        mut dir_swclk: Pin<Gpio19, FunctionSioOutput, PullNone>,
+        swdio: SwdioPin,
+        swclk: SwclkPin,
+        nreset: ResetPin,
+        mut dir_swdio: DirSwdioPin,
+        mut dir_swclk: DirSwclkPin,
         cpu_frequency: u32,
         delay: &'static Delay,
     ) -> Self {
@@ -497,11 +498,11 @@ impl DelayNs for Wait {
 #[inline(always)]
 pub fn create_dap(
     version_string: &'static str,
-    swdio: DynPin<Gpio10, PullDown>,
-    swclk: DynPin<Gpio11, PullDown>,
-    nreset: DynPin<Gpio9, PullNone>,
-    dir_swdio: Pin<Gpio12, FunctionSioOutput, PullNone>,
-    dir_swclk: Pin<Gpio19, FunctionSioOutput, PullNone>,
+    swdio: SwdioPin,
+    swclk: SwclkPin,
+    nreset: ResetPin,
+    dir_swdio: DirSwdioPin,
+    dir_swclk: DirSwclkPin,
     cpu_frequency: u32,
     delay: &'static Delay,
     leds: crate::leds::HostStatusToken,
