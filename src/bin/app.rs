@@ -1,13 +1,13 @@
 #![no_std]
 #![no_main]
 
-use pico_probe as _;
+use rusty_probe as _;
 
 #[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ, CLOCKS_IRQ])]
 mod app {
     use core::mem::MaybeUninit;
     use dap_rs::usb_device::class_prelude::*;
-    use pico_probe::{
+    use rusty_probe::{
         leds::{LedManager, Vtarget},
         setup::*,
     };
@@ -16,7 +16,7 @@ mod app {
 
     #[shared]
     struct Shared {
-        probe_usb: pico_probe::usb::ProbeUsb,
+        probe_usb: rusty_probe::usb::ProbeUsb,
     }
 
     #[local]
@@ -30,7 +30,7 @@ mod app {
 
     #[init(local = [
         usb_bus: MaybeUninit<UsbBusAllocator<UsbBus>> = MaybeUninit::uninit(),
-        delay: MaybeUninit<pico_probe::systick_delay::Delay> = MaybeUninit::uninit(),
+        delay: MaybeUninit<rusty_probe::systick_delay::Delay> = MaybeUninit::uninit(),
     ])]
     fn init(cx: init::Context) -> (Shared, Local) {
         let (

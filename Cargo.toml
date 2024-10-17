@@ -1,14 +1,14 @@
 [package]
 authors = ["Emil Fresk <emil.fresk@gmail.com>"]
 edition = "2021"
-name = "pico-probe"
-version = "0.1.0"
+name = "rusty-probe"
+version = "0.2.0"
 
 [dependencies]
 bitflags = "1.3.2"
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 rtic = { version = "2", features = ["thumbv6-backend"] }
-rtic-monotonics = { version = "2", features = ["rp2040", "cortex-m-systick"] }
+rtic-monotonics = { version = "2", features = ["rp2040"] }
 rtic-common = { version = "1" }
 defmt = { version = "=0.3.2", features = ["encoding-rzcobs"] }
 embedded-hal = { version = "1.0.0" }
