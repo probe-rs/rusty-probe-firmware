@@ -40,12 +40,9 @@ You can now repeat the above command, which will automatically restart and flash
 
 You may have to change `XTASK_SERIAL`, and on non-x86 linux platforms, you must update the runner configuration with the correct target (see [`.cargo/config.toml`](.cargo/config.toml#L15)).
 
-## TODO
+## Feature TODO list
 
-- [x] Move SWD impl to PIO
-- [ ] Add support for SWO (Manchester encoding or UART via PIO)
+- [ ] Add support for JTAG (only SWD works right now)
+- [ ] Add support for SWO
 - [ ] Add support for VCP (it enumerates now, but ignores all data)
-- [ ] Add the automatic polling of RTT buffers
-- [ ] Document the `dap-rs` traits and helpers
-- [ ] Document the firmware
 
