@@ -4,8 +4,8 @@ use panic_probe as _;
 
 use defmt_brtt as _;
 
-use rp2040_hal::timer::Instant;
-use rtic_monotonics::{rp2040::Timer, Monotonic};
+use rtic_monotonics::Monotonic;
+use setup::Mono;
 
 pub mod dap;
 pub mod device_signature;
@@ -16,6 +16,6 @@ pub mod systick_delay;
 pub mod usb;
 
 defmt::timestamp! {"{=u64:us}", {
-    Timer::now().checked_duration_since(Instant::from_ticks(0)).map(|i| i.ticks()).unwrap_or(0)
+    Mono::now().duration_since_epoch().to_micros()
 }
 }
