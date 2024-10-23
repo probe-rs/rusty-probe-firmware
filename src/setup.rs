@@ -298,7 +298,7 @@ where
         match self {
             DynPin::Input(_) => defmt::panic!("Output operation on input pin"),
             DynPin::Output(o) => {
-                o.set_high().ok();
+                o.set_low().ok();
             }
         }
     }
