@@ -306,7 +306,7 @@ where
     /// Note: This function panics if the pin is in the wrong mode.
     pub fn is_high(&mut self) -> bool {
         match self {
-            DynPin::Input(i) => matches!(i.is_high(), Ok(true)),
+            DynPin::Input(i) => i.is_high() == Ok(true),
             DynPin::Output(_) => {
                 defmt::panic!("Input operation on output pin");
             }
