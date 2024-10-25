@@ -17,7 +17,7 @@ DEFMT_LOG=off cargo build --release --bin app
 elf2uf2-rs target/thumbv6m-none-eabi/release/app app
 ```
 
-Start the Pico in bootloader mode and drop the `app.uf2` file to it, done! 
+Start the RP2040 in bootloader mode and drop the `app.uf2` file to it, done! 
 
 ## Running with `defmt` logs without debugger
 

@@ -2,17 +2,17 @@
 #![no_main]
 #![feature(type_alias_impl_trait)]
 
-use pico_probe as _;
+use rusty_probe as _;
 
 #[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ, CLOCKS_IRQ])]
 mod app {
     use core::mem::MaybeUninit;
+    use dap_rs::usb_device::class_prelude::*;
     use embedded_hal::digital::v2::OutputPin;
-    use pico_probe::leds::BoardLeds;
-    use pico_probe::setup::*;
+    use rusty_probe::leds::BoardLeds;
+    use rusty_probe::setup::*;
     use rp2040_hal::gpio::PinState;
     use rp2040_hal::usb::UsbBus;
-    use usb_device::class_prelude::*;
 
     use rtic_monotonics::systick::*;
 
@@ -30,7 +30,7 @@ mod app {
 
     #[init(local = [
         usb_bus: MaybeUninit<UsbBusAllocator<UsbBus>> = MaybeUninit::uninit(),
-        delay: MaybeUninit<pico_probe::systick_delay::Delay> = MaybeUninit::uninit(),
+        delay: MaybeUninit<rusty_probe::systick_delay::Delay> = MaybeUninit::uninit(),
     ])]
     fn init(cx: init::Context) -> (Shared, Local) {
         let pac = cx.device;

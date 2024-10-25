@@ -3,15 +3,23 @@ use crate::leds::{BoardLeds, HostStatusToken, LedManager};
 use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
-use embedded_hal::adc::OneShot;
-use embedded_hal::digital::v2::OutputPin;
-use embedded_hal::PwmPin;
+use dap_rs::usb_device::class_prelude::UsbBusAllocator;
+use embedded_hal::digital::{InputPin, OutputPin};
+use embedded_hal::pwm::SetDutyCycle;
+use embedded_hal_02::adc::OneShot;
+use replace_with::replace_with_or_abort_unchecked;
+use rp2040_hal::adc::AdcPin;
+use rp2040_hal::gpio::bank0::{
+    Gpio0, Gpio10, Gpio11, Gpio12, Gpio16, Gpio17, Gpio19, Gpio20, Gpio21, Gpio26, Gpio27, Gpio28,
+    Gpio29, Gpio3, Gpio5, Gpio6, Gpio7, Gpio8, Gpio9,
+};
+use rp2040_hal::gpio::{
+    FunctionSio, FunctionSioInput, FunctionSioOutput, PinId, PinState, PullDown, PullNone,
+    PullType, PullUp, SioInput, SioOutput, ValidFunction,
+};
 use rp2040_hal::{
     clocks::init_clocks_and_plls,
-    gpio::{
-        pin::bank0::*, FloatingInput, OutputDriveStrength, OutputSlewRate, Pin, Pins,
-        PushPullOutput, PullUpInput,
-    },
+    gpio::{OutputDriveStrength, OutputSlewRate, Pin, Pins},
     pac,
     pwm::{self, FreeRunning, Pwm0, Pwm2, Slice},
     rom_data,
@@ -19,13 +27,32 @@ use rp2040_hal::{
     watchdog::Watchdog,
     Adc, Clock, Sio,
 };
-use rtic_monotonics::rp2040;
-use usb_device::class_prelude::UsbBusAllocator;
-use embedded_hal::digital::v2::InputPin;
+use rtic_monotonics::rp2040::prelude::*;
 
 const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
 
 pub type DapHandler = dap_rs::dap::Dap<'static, Context, HostStatusToken, Wait, Jtag, Swd, Swo>;
+rp2040_timer_monotonic!(Mono);
+
+pub type VTargetPwmPin = Pin<Gpio0, FunctionSioOutput, PullDown>;
+pub type Enable5VKeyPin = Pin<Gpio3, FunctionSioOutput, PullDown>;
+pub type VTranslatorPwmPin = Pin<Gpio5, FunctionSio<SioOutput>, PullDown>;
+pub type EnableVTargetPin = Pin<Gpio6, FunctionSioOutput, PullDown>;
+pub type Enable5VPin = Pin<Gpio7, FunctionSioOutput, PullDown>;
+pub type GndDetectPin = Pin<Gpio8, FunctionSioInput, PullUp>;
+pub type ResetPin = DynPin<Gpio9, PullNone>;
+pub type SwdioPin = DynPin<Gpio10, PullDown>;
+pub type SwclkPin = DynPin<Gpio11, PullDown>;
+pub type DirSwdioPin = Pin<Gpio12, FunctionSioOutput, PullNone>;
+pub type TdoSwoPin = DynPin<Gpio16, PullDown>;
+pub type TdiPin = DynPin<Gpio17, PullDown>;
+pub type DirSwclkPin = Pin<Gpio19, FunctionSioOutput, PullNone>;
+pub type VcpTxPin = DynPin<Gpio20, PullUp>;
+pub type VcpRxPin = DynPin<Gpio21, PullUp>;
+pub type VTargetAdcPin = AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>;
+pub type LedGreenPin = Pin<Gpio27, FunctionSio<SioOutput>, PullDown>;
+pub type LedRedPin = Pin<Gpio28, FunctionSio<SioOutput>, PullDown>;
+pub type LedBluePin = Pin<Gpio29, FunctionSio<SioOutput>, PullDown>;
 
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.
@@ -109,7 +136,7 @@ pub fn setup(
     // let mut temperature_sensor = adc.enable_temp_sensor();
 
     // Configure GPIO26 as an ADC input
-    let adc_pin_0 = pins.gpio26.into_floating_input();
+    let adc_pin_0 = AdcPin::new(pins.gpio26.into_floating_input()).expect("Not an ADC pin");
 
     let adc = TargetVccReader {
         pin: adc_pin_0,
@@ -183,18 +210,17 @@ pub fn setup(
 
     let dap_hander = dap::create_dap(
         git_version,
-        io.into(),
-        ck.into(),
-        reset.into(),
-        dir_io.into(),
-        dir_ck.into(),
+        DynPin::Input(io.into_pull_down_input()),
+        DynPin::Input(ck.into_pull_down_input()),
+        DynPin::Input(reset.into_floating_input()),
+        dir_io.into_push_pull_output().into_pull_type(),
+        dir_ck.into_push_pull_output().into_pull_type(),
         clocks.system_clock.freq().raw(),
         delay,
         host_status_token,
     );
 
-    let timer_token = rtic_monotonics::create_rp2040_monotonic_token!();
-    rp2040::Timer::start(pac.TIMER, &mut resets, timer_token);
+    Mono::start(pac.TIMER, &mut resets);
 
     (
         led_manager,
@@ -207,24 +233,104 @@ pub fn setup(
     )
 }
 
-pub struct AllIOs {
-    pub io: Pin<Gpio10, PushPullOutput>,
-    pub ck: Pin<Gpio11, PushPullOutput>,
-    pub tdi: Pin<Gpio17, PushPullOutput>,
-    pub tdo_swo: Pin<Gpio16, PushPullOutput>,
-    pub reset: Pin<Gpio9, PushPullOutput>,
-    pub vcp_rx: Pin<Gpio21, PushPullOutput>,
-    pub vcp_tx: Pin<Gpio20, PushPullOutput>,
+/// A simple Dynamic pin, meaning it can be output or input.
+pub enum DynPin<P, InputPull>
+where
+    P: PinId,
+    InputPull: PullType,
+{
+    /// The pin is in input mode.
+    Input(Pin<P, FunctionSioInput, InputPull>),
+    /// The pin is in output mode.
+    Output(Pin<P, FunctionSioOutput, InputPull>),
 }
 
+#[inline(always)]
+pub fn replace_with<T, F: FnOnce(T) -> T>(dest: &mut T, f: F) {
+    // SAFETY: We have panic = "abort".
+    unsafe { replace_with_or_abort_unchecked(dest, f) }
+}
+
+impl<P, InputPull> DynPin<P, InputPull>
+where
+    P: ValidFunction<FunctionSioInput>,
+    P: ValidFunction<FunctionSioOutput>,
+    InputPull: PullType,
+{
+    pub fn into_input(&mut self) {
+        replace_with(self, |p| match p {
+            DynPin::Input(_) => p,
+            DynPin::Output(o) => DynPin::Input(o.into_function().into_pull_type()),
+        })
+    }
+
+    pub fn into_output(&mut self) {
+        replace_with(self, |p| match p {
+            DynPin::Input(i) => DynPin::Output(i.into_push_pull_output()),
+            DynPin::Output(_) => p,
+        })
+    }
+
+    pub fn into_output_in_state(&mut self, state: PinState) {
+        replace_with(self, |p| {
+            match p {
+                DynPin::Input(i) => {
+                    //
+                    DynPin::Output(i.into_push_pull_output_in_state(state))
+                }
+                DynPin::Output(_) => p,
+            }
+        })
+    }
+
+    /// Note: This function panics if the pin is in the wrong mode.
+    pub fn set_high(&mut self) {
+        match self {
+            DynPin::Input(_) => defmt::panic!("Output operation on input pin"),
+            DynPin::Output(o) => {
+                o.set_high().ok();
+            }
+        }
+    }
+
+    /// Note: This function panics if the pin is in the wrong mode.
+    pub fn set_low(&mut self) {
+        match self {
+            DynPin::Input(_) => defmt::panic!("Output operation on input pin"),
+            DynPin::Output(o) => {
+                o.set_low().ok();
+            }
+        }
+    }
+
+    /// Note: This function panics if the pin is in the wrong mode.
+    pub fn is_high(&mut self) -> bool {
+        match self {
+            DynPin::Input(i) => i.is_high() == Ok(true),
+            DynPin::Output(_) => {
+                defmt::panic!("Input operation on output pin");
+            }
+        }
+    }
+}
+
+pub struct AllIOs {
+    pub io: SwdioPin,
+    pub ck: SwclkPin,
+    pub tdi: TdiPin,
+    pub tdo_swo: TdoSwoPin,
+    pub reset: ResetPin,
+    pub vcp_rx: VcpRxPin,
+    pub vcp_tx: VcpTxPin,
+}
 
 pub struct TargetPhysicallyConnected {
-    pin: Pin<Gpio8, PullUpInput>,
+    pin: GndDetectPin,
 }
 
 impl TargetPhysicallyConnected {
     /// This checks for the target being connected via the GND detect pin.
-    pub fn target_detected(&self) -> bool {
+    pub fn target_detected(&mut self) -> bool {
         #[cfg(feature = "gnddetect")]
         return matches!(self.pin.is_low(), Ok(true));
         #[cfg(not(feature = "gnddetect"))]
@@ -233,7 +339,7 @@ impl TargetPhysicallyConnected {
 }
 
 pub struct TargetVccReader {
-    pub pin: Pin<Gpio26, FloatingInput>,
+    pub pin: VTargetAdcPin,
     pub adc: Adc,
 }
 
@@ -252,7 +358,7 @@ pub struct TranslatorPower {
 
 impl TranslatorPower {
     pub fn new(
-        mut vtranslator_pin: Pin<Gpio5, PushPullOutput>,
+        mut vtranslator_pin: VTranslatorPwmPin,
         mut vtranslator_pwm: Slice<Pwm2, FreeRunning>,
     ) -> Self {
         vtranslator_pwm.clr_ph_correct();
@@ -265,7 +371,7 @@ impl TranslatorPower {
         // Output channel B on PWM2 to GPIO 5
         let channel = &mut vtranslator_pwm.channel_b;
         channel.output_to(vtranslator_pin);
-        channel.set_duty(1023);
+        channel.set_duty_cycle(1023).unwrap();
 
         Self { vtranslator_pwm }
     }
@@ -288,13 +394,13 @@ impl TranslatorPower {
         let cnt = ((vomax - vomin - mv_diff) * limit_diff) / (vomax - vomin) + v33;
 
         let channel = &mut self.vtranslator_pwm.channel_b;
-        channel.set_duty(cnt as u16);
+        channel.set_duty_cycle(cnt as u16).unwrap();
     }
 }
 
 pub struct TargetPower {
-    enable_5v_key: Pin<Gpio3, PushPullOutput>,
-    enable_vtgt: Pin<Gpio6, PushPullOutput>,
+    enable_5v_key: Enable5VKeyPin,
+    enable_vtgt: EnableVTargetPin,
     vtgt_pwm: Slice<Pwm0, FreeRunning>,
 }
 
@@ -308,10 +414,10 @@ impl TargetPower {
     }
 
     pub fn new(
-        mut enable_5v_key: Pin<Gpio3, PushPullOutput>,
-        mut enable_5v: Pin<Gpio7, PushPullOutput>,
-        mut enable_vtgt: Pin<Gpio6, PushPullOutput>,
-        mut vtgt_pin: Pin<Gpio0, PushPullOutput>,
+        mut enable_5v_key: Enable5VKeyPin,
+        mut enable_5v: Enable5VPin,
+        mut enable_vtgt: EnableVTargetPin,
+        mut vtgt_pin: VTargetPwmPin,
         mut vtgt_pwm: Slice<Pwm0, FreeRunning>,
     ) -> Self {
         // Always enable the protected 5v (existed until rev E of hardware)
@@ -330,7 +436,7 @@ impl TargetPower {
         // Output channel A on PWM0 to GPIO 0
         let channel = &mut vtgt_pwm.channel_a;
         channel.output_to(vtgt_pin);
-        channel.set_duty(1023);
+        channel.set_duty_cycle(1023).ok();
 
         Self {
             enable_5v_key,
@@ -354,6 +460,6 @@ impl TargetPower {
         let cnt = ((vomax - vomin - mv_diff) * limit_diff) / (vomax - vomin) + v33;
 
         let channel = &mut self.vtgt_pwm.channel_a;
-        channel.set_duty(cnt as u16);
+        channel.set_duty_cycle(cnt as u16).unwrap();
     }
 }
