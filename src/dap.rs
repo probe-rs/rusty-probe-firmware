@@ -157,8 +157,11 @@ impl swj::Dependencies<Swd, Jtag> for Context {
         }
 
         let mut ret = swj::Pins::empty();
+        self.swclk_to_input();
         ret.set(swj::Pins::SWCLK, self.swclk.is_high());
+        self.swdio_to_input();
         ret.set(swj::Pins::SWDIO, self.swdio.is_high());
+        self.nreset.into_input();
         ret.set(swj::Pins::NRESET, self.nreset.is_high());
 
         trace!(
