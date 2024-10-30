@@ -326,6 +326,37 @@ impl swd::Swd<Context> for Swd {
         Ok(())
     }
 
+    fn write_sequence(&mut self, mut num_bits: usize, data: &[u8]) -> swd::Result<()> {
+        self.0.swdio_to_output();
+        let mut last = self.0.delay.get_current();
+
+        for b in data {
+            let bit_count = core::cmp::min(num_bits, 8);
+            for i in 0..bit_count {
+                self.write_bit((b >> i) & 0x1, &mut last);
+            }
+            num_bits -= bit_count;
+        }
+
+        Ok(())
+    }
+
+    fn read_sequence(&mut self, mut num_bits: usize, data: &mut [u8]) -> swd::Result<()> {
+        self.0.swdio_to_input();
+        let mut last = self.0.delay.get_current();
+
+        for b in data {
+            let bit_count = core::cmp::min(num_bits, 8);
+            for i in 0..bit_count {
+                let bit = self.read_bit(&mut last);
+                *b |= bit << i;
+            }
+            num_bits -= bit_count;
+        }
+
+        Ok(())
+    }
+
     fn set_clock(&mut self, max_frequency: u32) -> bool {
         trace!("SWD set clock: freq = {}", max_frequency);
         self.0.process_swj_clock(max_frequency)
