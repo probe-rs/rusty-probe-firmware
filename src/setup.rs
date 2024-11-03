@@ -4,7 +4,7 @@ use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
 use dap_rs::usb_device::class_prelude::UsbBusAllocator;
-use embedded_hal::digital::{InputPin, OutputPin};
+use embedded_hal::digital::{InputPin, OutputPin, StatefulOutputPin};
 use embedded_hal::pwm::SetDutyCycle;
 use embedded_hal_02::adc::OneShot;
 use replace_with::replace_with_or_abort_unchecked;
@@ -303,13 +303,11 @@ where
         }
     }
 
-    /// Note: This function panics if the pin is in the wrong mode.
+    /// Note: If the pin is an output this will only reflect the set state, NOT electrical state.
     pub fn is_high(&mut self) -> bool {
         match self {
             DynPin::Input(i) => i.is_high() == Ok(true),
-            DynPin::Output(_) => {
-                defmt::panic!("Input operation on output pin");
-            }
+            DynPin::Output(o) => o.is_set_high() == Ok(true),
         }
     }
 }
