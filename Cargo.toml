@@ -2,7 +2,7 @@
 authors = ["Emil Fresk <emil.fresk@gmail.com>"]
 edition = "2021"
 name = "rusty-probe"
-version = "0.2.0"
+version = "0.3.0"
 
 [dependencies]
 bitflags = "1.3.2"
@@ -19,7 +19,7 @@ embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["un
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
 replace_with = { version = "0.1.7", default-features = false, features = ["panic_abort"] }
 usbd-serial = "0.2.0"
-dap-rs = { git = "https://github.com/probe-rs/dap-rs.git", branch = "master", features = ["defmt"] }
+dap-rs = { version = "0.2.0", features = ["defmt"] }
 git-version = "0.3.5"
 pio-proc = "0.2.1"
 pio = "0.2.1"

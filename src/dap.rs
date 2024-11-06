@@ -132,7 +132,29 @@ impl swj::Dependencies<Swd, Jtag> for Context {
             }
         }
 
-        self.delay.delay_ticks(self.cycles_per_us * wait_us);
+        // Delay until desired output state or timeout.
+        let mut last = self.delay.get_current();
+        for _ in 0..wait_us {
+            last = self.delay.delay_ticks_from_last(self.cycles_per_us, last);
+
+            // If a pin is selected, make sure its output equals the desired output state, or else
+            // continue waiting.
+            let swclk_not_in_desired_state = mask.contains(swj::Pins::SWCLK)
+                && output.contains(swj::Pins::SWCLK) != self.swclk.is_high();
+            let swdio_not_in_desired_state = mask.contains(swj::Pins::SWDIO)
+                && output.contains(swj::Pins::SWDIO) != self.swdio.is_high();
+            let nreset_not_in_desired_state = mask.contains(swj::Pins::NRESET)
+                && output.contains(swj::Pins::NRESET) != self.nreset.is_high();
+
+            if swclk_not_in_desired_state
+                || swdio_not_in_desired_state
+                || nreset_not_in_desired_state
+            {
+                continue;
+            }
+
+            break;
+        }
 
         let mut ret = swj::Pins::empty();
         ret.set(swj::Pins::SWCLK, self.swclk.is_high());
@@ -322,6 +344,37 @@ impl swd::Swd<Context> for Swd {
 
         // Send trailing idle
         self.tx8(0);
+
+        Ok(())
+    }
+
+    fn write_sequence(&mut self, mut num_bits: usize, data: &[u8]) -> swd::Result<()> {
+        self.0.swdio_to_output();
+        let mut last = self.0.delay.get_current();
+
+        for b in data {
+            let bit_count = core::cmp::min(num_bits, 8);
+            for i in 0..bit_count {
+                self.write_bit((b >> i) & 0x1, &mut last);
+            }
+            num_bits -= bit_count;
+        }
+
+        Ok(())
+    }
+
+    fn read_sequence(&mut self, mut num_bits: usize, data: &mut [u8]) -> swd::Result<()> {
+        self.0.swdio_to_input();
+        let mut last = self.0.delay.get_current();
+
+        for b in data {
+            let bit_count = core::cmp::min(num_bits, 8);
+            for i in 0..bit_count {
+                let bit = self.read_bit(&mut last);
+                *b |= bit << i;
+            }
+            num_bits -= bit_count;
+        }
 
         Ok(())
     }

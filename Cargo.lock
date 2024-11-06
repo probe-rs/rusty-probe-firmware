@@ -217,8 +217,9 @@ checksum = "7a81dae078cea95a014a339291cec439d2f232ebe854a9d672b796c6afafa9b7"
 
 [[package]]
 name = "dap-rs"
-version = "0.1.0"
-source = "git+https://github.com/probe-rs/dap-rs.git?branch=master#d0ff8298ca32b150143d242dda03f3ff11ac9ae0"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3b08f5c3c5bbebdba362433caae98068323198d8a072de8774790826fe96bd2"
 dependencies = [
  "bitflags 1.3.2",
  "defmt",
@@ -1075,7 +1076,7 @@ checksum = "0e819f2bc632f285be6d7cd36e25940d45b2391dd6d9b939e79de557f7014248"
 
 [[package]]
 name = "rusty-probe"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bbqueue",
  "bitflags 1.3.2",
