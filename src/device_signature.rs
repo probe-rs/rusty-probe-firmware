@@ -1,4 +1,4 @@
-use core::ptr::addr_of;
+use core::ptr::addr_of_mut;
 use cortex_m::interrupt;
 use rp2040_hal::pac;
 use rp2040_hal::rom_data;
@@ -6,19 +6,22 @@ use rp2040_hal::rom_data;
 pub fn device_id_hex() -> &'static str {
     static mut DEVICE_ID_STR: [u8; 22] = [0; 22];
 
+    let raw = addr_of_mut!(DEVICE_ID_STR);
+
     unsafe {
         interrupt::free(|_| {
-            if DEVICE_ID_STR.as_ptr().read_volatile() == 0 {
+            if raw.read_volatile() == [0; 22] {
+                let for_change = &mut *raw;
                 let hex = b"0123456789abcdef";
                 for (i, b) in read_uid().iter().chain(read_jedec().iter()).enumerate() {
                     let lo = b & 0xf;
                     let hi = (b >> 4) & 0xf;
-                    DEVICE_ID_STR[i * 2] = hex[hi as usize];
-                    DEVICE_ID_STR[i * 2 + 1] = hex[lo as usize];
+                    for_change[i * 2] = hex[hi as usize];
+                    for_change[i * 2 + 1] = hex[lo as usize];
                 }
             }
         });
-        core::str::from_utf8_unchecked(&*addr_of!(DEVICE_ID_STR))
+        core::str::from_utf8_unchecked(&*raw)
     }
 }
 

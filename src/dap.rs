@@ -1,8 +1,11 @@
 use crate::{
-    setup::{DirSwclkPin, DirSwdioPin, ResetPin, SwclkPin, SwdioPin},
+    setup::{
+        DirTckSwclkPin, DirTdiPin, DirTdoSwoPin, DirTmsSwdioPin, ResetPin, TckSwclkPin, TdiPin,
+        TdoSwoPin, TmsSwdioPin,
+    },
     systick_delay::Delay,
 };
-use dap_rs::{swj::Dependencies, *};
+use dap_rs::{jtag::TapConfig, swj::Dependencies, *};
 use defmt::trace;
 use embedded_hal::{
     delay::DelayNs,
@@ -15,11 +18,17 @@ pub struct Context {
     cycles_per_us: u32,
     half_period_ticks: u32,
     delay: &'static Delay,
-    swdio: SwdioPin,
-    swclk: SwclkPin,
+    tms_swdio: TmsSwdioPin,
+    tck_swclk: TckSwclkPin,
+    tdo_swo: TdoSwoPin,
+    tdi: TdiPin,
     nreset: ResetPin,
-    dir_swdio: DirSwdioPin,
-    dir_swclk: DirSwclkPin,
+    dir_tms_swdio: DirTmsSwdioPin,
+    dir_tck_swclk: DirTckSwclkPin,
+    dir_tdo_swo: DirTdoSwoPin,
+    dir_tdi: DirTdiPin,
+    swd_config: swd::Config,
+    jtag_config: jtag::Config,
 }
 
 impl defmt::Format for Context {
@@ -48,43 +57,76 @@ impl core::fmt::Debug for Context {
 }
 
 impl Context {
-    fn swdio_to_input(&mut self) {
-        defmt::trace!("SWDIO -> input");
-        self.dir_swdio.set_low().ok();
-        self.swdio.into_input();
+    fn tms_swdio_to_input(&mut self) {
+        defmt::trace!("TMS/SWDIO -> input");
+        self.dir_tms_swdio.set_low().ok();
+        self.tms_swdio.into_input();
     }
 
-    fn swdio_to_output(&mut self) {
-        defmt::trace!("SWDIO -> output");
-        self.swdio.into_output_in_state(PinState::High);
-        self.dir_swdio.set_high().ok();
+    fn tms_swdio_to_output(&mut self) {
+        defmt::trace!("TMS/SWDIO -> output");
+        self.tms_swdio.into_output_in_state(PinState::High);
+        self.dir_tms_swdio.set_high().ok();
     }
 
-    fn swclk_to_input(&mut self) {
-        defmt::trace!("SWCLK -> input");
-        self.dir_swclk.set_low().ok();
-        self.swclk.into_input();
+    fn tck_swclk_to_input(&mut self) {
+        defmt::trace!("TCK/SWCLK -> input");
+        self.dir_tck_swclk.set_low().ok();
+        self.tck_swclk.into_input();
     }
 
-    fn swclk_to_output(&mut self) {
-        defmt::trace!("SWCLK -> output");
-        self.swclk.into_output_in_state(PinState::High);
-        self.dir_swclk.set_high().ok();
+    fn tck_swclk_to_output(&mut self) {
+        defmt::trace!("TCK/SWCLK -> output");
+        self.tck_swclk.into_output_in_state(PinState::High);
+        self.dir_tck_swclk.set_high().ok();
+    }
+
+    fn tdo_swo_to_input(&mut self) {
+        defmt::trace!("TDO/SWO -> input");
+        self.dir_tdo_swo.set_low().ok();
+        self.tdo_swo.into_input();
+    }
+
+    fn tdo_swo_to_output(&mut self) {
+        defmt::trace!("TDO/SWO -> output");
+        self.tdo_swo.into_output_in_state(PinState::High);
+        self.dir_tdo_swo.set_high().ok();
+    }
+
+    fn tdi_to_input(&mut self) {
+        defmt::trace!("TDI -> input");
+        self.dir_tdi.set_low().ok();
+        self.tdi.into_input();
+    }
+
+    fn tdi_to_output(&mut self) {
+        defmt::trace!("TDI -> output");
+        self.tdi.into_output_in_state(PinState::High);
+        self.dir_tdi.set_high().ok();
     }
 
     fn from_pins(
-        swdio: SwdioPin,
-        swclk: SwclkPin,
+        tms_swdio: TmsSwdioPin,
+        tck_swclk: TckSwclkPin,
+        tdo_swo: TdoSwoPin,
+        tdi: TdiPin,
         nreset: ResetPin,
-        mut dir_swdio: DirSwdioPin,
-        mut dir_swclk: DirSwclkPin,
+        mut dir_tms_swdio: DirTmsSwdioPin,
+        mut dir_tck_swclk: DirTckSwclkPin,
+        mut dir_tdo_swo: DirTdoSwoPin,
+        mut dir_tdi: DirTdiPin,
         cpu_frequency: u32,
         delay: &'static Delay,
+        scan_chain: &'static mut [TapConfig],
     ) -> Self {
-        dir_swdio.set_low().ok();
-        dir_swclk.set_low().ok();
-        defmt::trace!("SWCLK -> input");
-        defmt::trace!("SWDIO -> input");
+        dir_tms_swdio.set_low().ok();
+        dir_tck_swclk.set_low().ok();
+        dir_tdo_swo.set_low().ok();
+        dir_tdi.set_low().ok();
+        defmt::trace!("TMS/SWCLK -> input");
+        defmt::trace!("TCK/SWDIO -> input");
+        defmt::trace!("TDO/SDO -> input");
+        defmt::trace!("TDI -> input");
 
         let max_frequency = 100_000;
         let half_period_ticks = cpu_frequency / max_frequency / 2;
@@ -94,11 +136,17 @@ impl Context {
             cycles_per_us: cpu_frequency / 1_000_000,
             half_period_ticks,
             delay,
-            swdio,
-            swclk,
+            tms_swdio,
+            tck_swclk,
+            tdo_swo,
+            tdi,
             nreset,
-            dir_swdio,
-            dir_swclk,
+            dir_tms_swdio,
+            dir_tck_swclk,
+            dir_tdo_swo,
+            dir_tdi,
+            swd_config: swd::Config::default(),
+            jtag_config: jtag::Config::new(scan_chain),
         }
     }
 }
@@ -106,20 +154,38 @@ impl Context {
 impl swj::Dependencies<Swd, Jtag> for Context {
     fn process_swj_pins(&mut self, output: swj::Pins, mask: swj::Pins, wait_us: u32) -> swj::Pins {
         if mask.contains(swj::Pins::SWCLK) {
-            self.swclk_to_output();
+            self.tck_swclk_to_output();
             if output.contains(swj::Pins::SWCLK) {
-                self.swclk.set_high();
+                self.tck_swclk.set_high();
             } else {
-                self.swclk.set_low();
+                self.tck_swclk.set_low();
             }
         }
 
         if mask.contains(swj::Pins::SWDIO) {
-            self.swdio_to_output();
+            self.tms_swdio_to_output();
             if output.contains(swj::Pins::SWDIO) {
-                self.swdio.set_high();
+                self.tms_swdio.set_high();
             } else {
-                self.swdio.set_low();
+                self.tms_swdio.set_low();
+            }
+        }
+
+        if mask.contains(swj::Pins::TDO) {
+            self.tdo_swo_to_output();
+            if output.contains(swj::Pins::TDO) {
+                self.tdo_swo.set_high();
+            } else {
+                self.tdo_swo.set_low();
+            }
+        }
+
+        if mask.contains(swj::Pins::TDI) {
+            self.tdi_to_output();
+            if output.contains(swj::Pins::TDI) {
+                self.tdi.set_high();
+            } else {
+                self.tdi.set_low();
             }
         }
 
@@ -140,14 +206,20 @@ impl swj::Dependencies<Swd, Jtag> for Context {
             // If a pin is selected, make sure its output equals the desired output state, or else
             // continue waiting.
             let swclk_not_in_desired_state = mask.contains(swj::Pins::SWCLK)
-                && output.contains(swj::Pins::SWCLK) != self.swclk.is_high();
+                && output.contains(swj::Pins::SWCLK) != self.tck_swclk.is_high();
             let swdio_not_in_desired_state = mask.contains(swj::Pins::SWDIO)
-                && output.contains(swj::Pins::SWDIO) != self.swdio.is_high();
+                && output.contains(swj::Pins::SWDIO) != self.tms_swdio.is_high();
+            let tdo_not_in_desired_state = mask.contains(swj::Pins::TDO)
+                && output.contains(swj::Pins::TDO) != self.tdo_swo.is_high();
+            let tdi_not_in_desired_state = mask.contains(swj::Pins::TDI)
+                && output.contains(swj::Pins::TDI) != self.tdi.is_high();
             let nreset_not_in_desired_state = mask.contains(swj::Pins::NRESET)
                 && output.contains(swj::Pins::NRESET) != self.nreset.is_high();
 
             if swclk_not_in_desired_state
                 || swdio_not_in_desired_state
+                || tdo_not_in_desired_state
+                || tdi_not_in_desired_state
                 || nreset_not_in_desired_state
             {
                 continue;
@@ -156,12 +228,20 @@ impl swj::Dependencies<Swd, Jtag> for Context {
             break;
         }
 
-        let mut ret = swj::Pins::empty();
-        self.swclk_to_input();
-        ret.set(swj::Pins::SWCLK, self.swclk.is_high());
-        self.swdio_to_input();
-        ret.set(swj::Pins::SWDIO, self.swdio.is_high());
+        // Read back input state, wait 1us to have inputs stabilize.
+        self.tck_swclk_to_input();
+        self.tms_swdio_to_input();
+        self.tdo_swo_to_input();
+        self.tdi_to_input();
         self.nreset.into_input();
+
+        self.delay.delay_ticks_from_last(self.cycles_per_us, last);
+
+        let mut ret = swj::Pins::empty();
+        ret.set(swj::Pins::SWCLK, self.tck_swclk.is_high());
+        ret.set(swj::Pins::SWDIO, self.tms_swdio.is_high());
+        ret.set(swj::Pins::TDO, self.tdo_swo.is_high());
+        ret.set(swj::Pins::TDI, self.tdi.is_high());
         ret.set(swj::Pins::NRESET, self.nreset.is_high());
 
         trace!(
@@ -175,8 +255,8 @@ impl swj::Dependencies<Swd, Jtag> for Context {
     }
 
     fn process_swj_sequence(&mut self, data: &[u8], mut bits: usize) {
-        self.swclk_to_output();
-        self.swdio_to_output();
+        self.tck_swclk_to_output();
+        self.tms_swdio_to_output();
 
         let half_period_ticks = self.half_period_ticks;
         let mut last = self.delay.get_current();
@@ -190,13 +270,13 @@ impl swj::Dependencies<Swd, Jtag> for Context {
                 let bit = byte & 1;
                 byte >>= 1;
                 if bit != 0 {
-                    self.swdio.set_high();
+                    self.tms_swdio.set_high();
                 } else {
-                    self.swdio.set_low();
+                    self.tms_swdio.set_low();
                 }
-                self.swclk.set_low();
+                self.tck_swclk.set_low();
                 last = self.delay.delay_ticks_from_last(half_period_ticks, last);
-                self.swclk.set_high();
+                self.tck_swclk.set_high();
                 last = self.delay.delay_ticks_from_last(half_period_ticks, last);
             }
             bits -= frame_bits;
@@ -217,9 +297,19 @@ impl swj::Dependencies<Swd, Jtag> for Context {
     }
 
     fn high_impedance_mode(&mut self) {
-        self.swdio_to_input();
-        self.swclk_to_input();
+        self.tms_swdio_to_input();
+        self.tck_swclk_to_input();
+        self.tdo_swo_to_input();
+        self.tdi_to_input();
         self.nreset.into_input();
+    }
+
+    fn swd_config(&mut self) -> &mut swd::Config {
+        &mut self.swd_config
+    }
+
+    fn jtag_config(&mut self) -> &mut jtag::Config {
+        &mut self.jtag_config
     }
 }
 
@@ -232,20 +322,97 @@ impl From<Jtag> for Context {
 }
 
 impl From<Context> for Jtag {
-    fn from(value: Context) -> Self {
+    fn from(mut value: Context) -> Self {
+        value.nreset.into_output_in_state(PinState::High);
+        value.tms_swdio_to_output();
+        value.tck_swclk_to_output();
+        value.tdi_to_output();
+
+        value.tdo_swo_to_input();
+
         Self(value)
     }
 }
 
-impl jtag::Jtag<Context> for Jtag {
-    const AVAILABLE: bool = false;
+impl Jtag {
+    fn shift_jtag(&mut self, tms: bool, tdi: u32, num_bits: usize) -> u32 {
+        if tms {
+            self.0.tms_swdio.set_high();
+        } else {
+            self.0.tms_swdio.set_low();
+        }
 
-    fn sequences(&mut self, _data: &[u8], _rxbuf: &mut [u8]) -> u32 {
-        0
+        let mut last = self.0.delay.get_current();
+        let half_period_ticks = self.0.half_period_ticks;
+
+        let mut tdo = 0;
+        for i in 0..num_bits {
+            if tdi & (1 << i) != 0 {
+                self.0.tdi.set_high();
+            } else {
+                self.0.tdi.set_low();
+            }
+
+            self.0.tck_swclk.set_low();
+            last = self.0.delay.delay_ticks_from_last(half_period_ticks, last);
+
+            tdo |= (self.0.tdo_swo.is_high() as u32) << i;
+
+            self.0.tck_swclk.set_high();
+            last = self.0.delay.delay_ticks_from_last(half_period_ticks, last);
+        }
+        tdo
     }
+}
+
+impl jtag::Jtag<Context> for Jtag {
+    const AVAILABLE: bool = true;
 
     fn set_clock(&mut self, max_frequency: u32) -> bool {
         self.0.process_swj_clock(max_frequency)
+    }
+
+    fn config(&mut self) -> &mut jtag::Config {
+        &mut self.0.jtag_config
+    }
+
+    fn sequence(&mut self, info: jtag::SequenceInfo, tdi: &[u8], mut rxbuf: &mut [u8]) {
+        self.0.tms_swdio_to_output();
+        self.0.tdi_to_output();
+        self.0.tdo_swo_to_input();
+        self.0.tck_swclk_to_output();
+
+        let mut n_bits = info.n_bits;
+        for &byte in tdi {
+            let bits = n_bits.min(8) as usize;
+            n_bits -= bits as u8;
+            let tdo = self.shift_jtag(info.tms, byte as u32, bits);
+            if info.capture && !rxbuf.is_empty() {
+                rxbuf[0] = tdo as u8;
+                rxbuf = &mut rxbuf[1..];
+            }
+        }
+    }
+
+    fn tms_sequence(&mut self, tms: &[bool]) {
+        self.0.tms_swdio_to_output();
+        self.0.tck_swclk_to_output();
+
+        let mut last = self.0.delay.get_current();
+        let half_period_ticks = self.0.half_period_ticks;
+
+        for &bit in tms {
+            if bit {
+                self.0.tms_swdio.set_high();
+            } else {
+                self.0.tms_swdio.set_low();
+            }
+
+            self.0.tck_swclk.set_low();
+            last = self.0.delay.delay_ticks_from_last(half_period_ticks, last);
+            self.0.tck_swclk.set_high();
+            last = self.0.delay.delay_ticks_from_last(half_period_ticks, last);
+        }
     }
 }
 
@@ -260,9 +427,10 @@ impl From<Swd> for Context {
 
 impl From<Context> for Swd {
     fn from(mut value: Context) -> Self {
-        // Maybe this should go to some `Swd::new`
-        value.swdio_to_output();
-        value.swclk_to_output();
+        value.tms_swdio_to_output();
+        value.tck_swclk_to_output();
+        value.tdo_swo_to_input();
+        value.tdi_to_input();
         value.nreset.into_input();
 
         Self(value)
@@ -352,7 +520,7 @@ impl swd::Swd<Context> for Swd {
     }
 
     fn write_sequence(&mut self, mut num_bits: usize, data: &[u8]) -> swd::Result<()> {
-        self.0.swdio_to_output();
+        self.0.tms_swdio_to_output();
         let mut last = self.0.delay.get_current();
 
         for b in data {
@@ -367,7 +535,7 @@ impl swd::Swd<Context> for Swd {
     }
 
     fn read_sequence(&mut self, mut num_bits: usize, data: &mut [u8]) -> swd::Result<()> {
-        self.0.swdio_to_input();
+        self.0.tms_swdio_to_input();
         let mut last = self.0.delay.get_current();
 
         for b in data {
@@ -386,11 +554,15 @@ impl swd::Swd<Context> for Swd {
         trace!("SWD set clock: freq = {}", max_frequency);
         self.0.process_swj_clock(max_frequency)
     }
+
+    fn config(&mut self) -> &mut swd::Config {
+        &mut self.0.swd_config
+    }
 }
 
 impl Swd {
     fn tx8(&mut self, mut data: u8) {
-        self.0.swdio_to_output();
+        self.0.tms_swdio_to_output();
 
         let mut last = self.0.delay.get_current();
 
@@ -401,7 +573,7 @@ impl Swd {
     }
 
     fn rx4(&mut self) -> u8 {
-        self.0.swdio_to_input();
+        self.0.tms_swdio_to_input();
 
         let mut data = 0;
         let mut last = self.0.delay.get_current();
@@ -414,7 +586,7 @@ impl Swd {
     }
 
     fn rx5(&mut self) -> u8 {
-        self.0.swdio_to_input();
+        self.0.tms_swdio_to_input();
 
         let mut last = self.0.delay.get_current();
 
@@ -428,7 +600,7 @@ impl Swd {
     }
 
     fn send_data(&mut self, mut data: u32, parity: bool) {
-        self.0.swdio_to_output();
+        self.0.tms_swdio_to_output();
 
         let mut last = self.0.delay.get_current();
 
@@ -441,7 +613,7 @@ impl Swd {
     }
 
     fn read_data(&mut self) -> (u32, bool) {
-        self.0.swdio_to_input();
+        self.0.tms_swdio_to_input();
 
         let mut data = 0;
 
@@ -459,16 +631,16 @@ impl Swd {
     #[inline(always)]
     fn write_bit(&mut self, bit: u8, last: &mut u32) {
         if bit != 0 {
-            self.0.swdio.set_high();
+            self.0.tms_swdio.set_high();
         } else {
-            self.0.swdio.set_low();
+            self.0.tms_swdio.set_low();
         }
 
         let half_period_ticks = self.0.half_period_ticks;
 
-        self.0.swclk.set_low();
+        self.0.tck_swclk.set_low();
         *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
-        self.0.swclk.set_high();
+        self.0.tck_swclk.set_high();
         *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
     }
 
@@ -476,10 +648,10 @@ impl Swd {
     fn read_bit(&mut self, last: &mut u32) -> u8 {
         let half_period_ticks = self.0.half_period_ticks;
 
-        self.0.swclk.set_low();
+        self.0.tck_swclk.set_low();
         *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
-        let bit = self.0.swdio.is_high() as u8;
-        self.0.swclk.set_high();
+        let bit = self.0.tms_swdio.is_high() as u8;
+        self.0.tck_swclk.set_high();
         *last = self.0.delay.delay_ticks_from_last(half_period_ticks, *last);
 
         bit
@@ -554,23 +726,33 @@ impl DelayNs for Wait {
 #[inline(always)]
 pub fn create_dap(
     version_string: &'static str,
-    swdio: SwdioPin,
-    swclk: SwclkPin,
+    tms_swdio: TmsSwdioPin,
+    tck_swclk: TckSwclkPin,
+    tdo_swo: TdoSwoPin,
+    tdi: TdiPin,
     nreset: ResetPin,
-    dir_swdio: DirSwdioPin,
-    dir_swclk: DirSwclkPin,
+    dir_tms_swdio: DirTmsSwdioPin,
+    dir_tck_swclk: DirTckSwclkPin,
+    dir_tdo_swo: DirTdoSwoPin,
+    dir_tdi: DirTdiPin,
     cpu_frequency: u32,
     delay: &'static Delay,
+    scan_chain: &'static mut [TapConfig],
     leds: crate::leds::HostStatusToken,
 ) -> crate::setup::DapHandler {
     let context = Context::from_pins(
-        swdio,
-        swclk,
+        tms_swdio,
+        tck_swclk,
+        tdo_swo,
+        tdi,
         nreset,
-        dir_swdio,
-        dir_swclk,
+        dir_tms_swdio,
+        dir_tck_swclk,
+        dir_tdo_swo,
+        dir_tdi,
         cpu_frequency,
         delay,
+        scan_chain,
     );
     let wait = Wait::new(delay);
     let swo = None;
