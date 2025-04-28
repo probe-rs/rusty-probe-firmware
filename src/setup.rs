@@ -3,6 +3,7 @@ use crate::leds::{BoardLeds, HostStatusToken, LedManager};
 use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
 use core::mem::MaybeUninit;
+use dap_rs::jtag::TapConfig;
 use dap_rs::usb_device::class_prelude::UsbBusAllocator;
 use embedded_hal::digital::{InputPin, OutputPin, StatefulOutputPin};
 use embedded_hal::pwm::SetDutyCycle;
@@ -10,8 +11,8 @@ use embedded_hal_02::adc::OneShot;
 use replace_with::replace_with_or_abort_unchecked;
 use rp2040_hal::adc::AdcPin;
 use rp2040_hal::gpio::bank0::{
-    Gpio0, Gpio10, Gpio11, Gpio12, Gpio16, Gpio17, Gpio19, Gpio20, Gpio21, Gpio26, Gpio27, Gpio28,
-    Gpio29, Gpio3, Gpio5, Gpio6, Gpio7, Gpio8, Gpio9,
+    Gpio0, Gpio10, Gpio11, Gpio12, Gpio16, Gpio17, Gpio19, Gpio20, Gpio21, Gpio22, Gpio23, Gpio26,
+    Gpio27, Gpio28, Gpio29, Gpio3, Gpio5, Gpio6, Gpio7, Gpio8, Gpio9,
 };
 use rp2040_hal::gpio::{
     FunctionSio, FunctionSioInput, FunctionSioOutput, PinId, PinState, PullDown, PullNone,
@@ -41,12 +42,14 @@ pub type EnableVTargetPin = Pin<Gpio6, FunctionSioOutput, PullDown>;
 pub type Enable5VPin = Pin<Gpio7, FunctionSioOutput, PullDown>;
 pub type GndDetectPin = Pin<Gpio8, FunctionSioInput, PullUp>;
 pub type ResetPin = DynPin<Gpio9, PullNone>;
-pub type SwdioPin = DynPin<Gpio10, PullDown>;
-pub type SwclkPin = DynPin<Gpio11, PullDown>;
-pub type DirSwdioPin = Pin<Gpio12, FunctionSioOutput, PullNone>;
+pub type TckSwclkPin = DynPin<Gpio11, PullDown>;
+pub type DirTckSwclkPin = Pin<Gpio19, FunctionSioOutput, PullNone>;
+pub type TmsSwdioPin = DynPin<Gpio10, PullDown>;
+pub type DirTmsSwdioPin = Pin<Gpio12, FunctionSioOutput, PullNone>;
 pub type TdoSwoPin = DynPin<Gpio16, PullDown>;
+pub type DirTdoSwoPin = Pin<Gpio22, FunctionSioOutput, PullNone>;
 pub type TdiPin = DynPin<Gpio17, PullDown>;
-pub type DirSwclkPin = Pin<Gpio19, FunctionSioOutput, PullNone>;
+pub type DirTdiPin = Pin<Gpio23, FunctionSioOutput, PullNone>;
 pub type VcpTxPin = DynPin<Gpio20, PullUp>;
 pub type VcpRxPin = DynPin<Gpio21, PullUp>;
 pub type VTargetAdcPin = AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>;
@@ -66,6 +69,7 @@ pub fn setup(
     core: cortex_m::Peripherals,
     usb_bus: &'static mut MaybeUninit<UsbBusAllocator<UsbBus>>,
     delay: &'static mut MaybeUninit<Delay>,
+    scan_chain: &'static mut [TapConfig],
 ) -> (
     LedManager,
     ProbeUsb,
@@ -182,8 +186,11 @@ pub fn setup(
     let reset = pins.gpio9;
     let gnd_detect = pins.gpio8.into_pull_up_input();
 
-    let _tdi = pins.gpio17;
-    let _dir_tdi = pins.gpio23;
+    let mut tdo_swo = pins.gpio16;
+    let mut dir_tdo_swo = pins.gpio22;
+
+    let mut tdi = pins.gpio17;
+    let mut dir_tdi = pins.gpio23;
 
     let _vcp_rx = pins.gpio21;
     let _vcp_tx = pins.gpio20;
@@ -195,10 +202,18 @@ pub fn setup(
     io.set_slew_rate(OutputSlewRate::Fast);
     ck.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
     ck.set_slew_rate(OutputSlewRate::Fast);
+    tdo_swo.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
+    tdo_swo.set_slew_rate(OutputSlewRate::Fast);
+    tdi.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
+    tdi.set_slew_rate(OutputSlewRate::Fast);
     dir_io.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
     dir_io.set_slew_rate(OutputSlewRate::Fast);
     dir_ck.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
     dir_ck.set_slew_rate(OutputSlewRate::Fast);
+    dir_tdo_swo.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
+    dir_tdo_swo.set_slew_rate(OutputSlewRate::Fast);
+    dir_tdi.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
+    dir_tdi.set_slew_rate(OutputSlewRate::Fast);
 
     let git_version: &'static str = git_version::git_version!();
     let delay = delay.write(Delay::new(core.SYST, clocks.system_clock.freq().raw()));
@@ -212,11 +227,16 @@ pub fn setup(
         git_version,
         DynPin::Input(io.into_pull_down_input()),
         DynPin::Input(ck.into_pull_down_input()),
+        DynPin::Input(tdo_swo.into_pull_down_input()),
+        DynPin::Input(tdi.into_pull_down_input()),
         DynPin::Input(reset.into_floating_input()),
         dir_io.into_push_pull_output().into_pull_type(),
         dir_ck.into_push_pull_output().into_pull_type(),
+        dir_tdo_swo.into_push_pull_output().into_pull_type(),
+        dir_tdi.into_push_pull_output().into_pull_type(),
         clocks.system_clock.freq().raw(),
         delay,
+        scan_chain,
         host_status_token,
     );
 
@@ -313,8 +333,8 @@ where
 }
 
 pub struct AllIOs {
-    pub io: SwdioPin,
-    pub ck: SwclkPin,
+    pub io: TmsSwdioPin,
+    pub ck: TckSwclkPin,
     pub tdi: TdiPin,
     pub tdo_swo: TdoSwoPin,
     pub reset: ResetPin,
