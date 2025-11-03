@@ -4,20 +4,31 @@ This firmware implements an CMSIS-DAP v1 and v2 compatible probe.
 
 ## Building
 
-You can build the project and generate a `.uf2` file as follows:
+First, make sure you have `picotool` available on your system. 
+Instructions for installing it can be found [here](https://github.com/raspberrypi/picotool).
+
+You can then build the project and generate a `.uf2` file as follows:
 
 ```console
-# Install elf2uf2-rs and flip-link (you only need to do this once)
-cargo install elf2uf2-rs flip-link
+# Install flip-link (you only need to do this once)
+cargo install flip-link
 
 # Build the ELF without logging
 DEFMT_LOG=off cargo build --release --bin app
 
 # Generate .uf2 file
-elf2uf2-rs target/thumbv6m-none-eabi/release/app app
+picotool uf2 convert -t elf target/thumbv6m-none-eabi/release/app app.uf2
 ```
 
 Start the RP2040 in bootloader mode and drop the `app.uf2` file to it, done! 
+
+Alternatively, you can use the provided `picotool load` command to skip the conversion step.
+Plug the `rusty-probe` into your computer while holding the button pressed (to enter `bootsel` mode) and run:
+
+```
+# Directly load the binary onto the device (instead of generating a .uf2 file step above)
+picotool load -x -t elf target/thumbv6m-none-eabi/release/app
+```
 
 ## Running with `defmt` logs without debugger
 

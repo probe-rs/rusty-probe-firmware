@@ -1,11 +1,11 @@
 # Choose a default "cargo run" tool.
 # probe-run is recommended if you have a debugger
-# elf2uf2-rs loads firmware over USB when the rp2040 is in boot mode
+# picotool loads firmware over USB when the rp2040 is in boot mode
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 # runner = "probe-run --chip RP2040 --probe 3c004b001051383439393134"
 # runner = "probe-run --chip RP2040 --probe dc6168968f3b812eef4014"
 # runner = "probe-run --chip RP2040 --probe dc61cd078f667031ef4014"
-# runner = "elf2uf2-rs -d"
+# runner = "picotool load -x -t elf"
 
 # This runner allows you to log & restart the Rusty Probe using
 # nothing but a USB connection.
