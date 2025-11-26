@@ -15,3 +15,4 @@ target/
 !.vscode/extensions.json
 !.vscode/settings.json
 
+.direnv/
