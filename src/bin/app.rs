@@ -6,13 +6,13 @@ use rusty_probe as _;
 #[rtic::app(device = rp2040_hal::pac, dispatchers = [XIP_IRQ, CLOCKS_IRQ])]
 mod app {
     use core::mem::MaybeUninit;
-    use dap_rs::usb_device::class_prelude::*;
+    use dap_rs::{jtag::TapConfig, usb_device::class_prelude::*};
+    use rp2040_hal::usb::UsbBus;
+    use rtic_monotonics::rp2040::prelude::*;
     use rusty_probe::{
         leds::{LedManager, Vtarget},
         setup::*,
     };
-    use rp2040_hal::usb::UsbBus;
-    use rtic_monotonics::rp2040::prelude::*;
 
     #[shared]
     struct Shared {
@@ -31,6 +31,7 @@ mod app {
     #[init(local = [
         usb_bus: MaybeUninit<UsbBusAllocator<UsbBus>> = MaybeUninit::uninit(),
         delay: MaybeUninit<rusty_probe::systick_delay::Delay> = MaybeUninit::uninit(),
+        scan_chain: [TapConfig; 8] = [TapConfig::INIT; 8],
     ])]
     fn init(cx: init::Context) -> (Shared, Local) {
         let (
@@ -41,7 +42,13 @@ mod app {
             translator_power,
             target_power,
             target_physically_connected,
-        ) = setup(cx.device, cx.core, cx.local.usb_bus, cx.local.delay);
+        ) = setup(
+            cx.device,
+            cx.core,
+            cx.local.usb_bus,
+            cx.local.delay,
+            cx.local.scan_chain,
+        );
 
         voltage_translator_control::spawn().ok();
 
@@ -121,18 +128,18 @@ mod app {
 
         probe_usb.lock(|probe_usb| {
             if let Some(request) = probe_usb.interrupt() {
-                use dap_rs::{dap::DapVersion, usb::Request};
+                use dap_rs::usb::Request;
 
                 match request {
                     Request::DAP1Command((report, n)) => {
-                        let len = dap.process_command(&report[..n], resp_buf, DapVersion::V1);
+                        let len = dap.process_command(&report[..n], resp_buf);
 
                         if len > 0 {
                             probe_usb.dap1_reply(&resp_buf[..len]);
                         }
                     }
                     Request::DAP2Command((report, n)) => {
-                        let len = dap.process_command(&report[..n], resp_buf, DapVersion::V2);
+                        let len = dap.process_command(&report[..n], resp_buf);
 
                         if len > 0 {
                             probe_usb.dap2_reply(&resp_buf[..len]);
