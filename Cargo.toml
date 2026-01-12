@@ -10,7 +10,7 @@ cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 rtic = { version = "2", features = ["thumbv6-backend"] }
 rtic-monotonics = { version = "2", features = ["rp2040"] }
 rtic-common = { version = "1" }
-defmt = { version = "=0.3.2", features = ["encoding-rzcobs"] }
+defmt = { version = "1", features = ["encoding-rzcobs"] }
 embedded-hal = { version = "1.0.0" }
 
 # Use for the ADC trait, removed in embedded-hal 1.0
@@ -19,7 +19,8 @@ embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["un
 panic-probe = { version = "0.3.0", features = ["print-defmt"] }
 replace_with = { version = "0.1.7", default-features = false, features = ["panic_abort"] }
 usbd-serial = "0.2.0"
-dap-rs = { version = "0.2.0", features = ["defmt"] }
+# dap-rs = { version = "0.2.0", features = ["defmt"] }
+dap-rs = { git = "https://github.com/probe-rs/dap-rs.git", branch = "master" }
 git-version = "0.3.5"
 pio-proc = "0.2.1"
 pio = "0.2.1"
@@ -27,8 +28,8 @@ futures-util = { version = "0.3.27", default-features = false }
 portable-atomic = { version = "1", features = ["unsafe-assume-single-core"] }
 
 # If you're not going to use a Board Support Package you'll need these:
-rp2040-hal = { version = "0.10", features = ["rt"] }
-rp2040-boot2 = "0.2.1"
+rp2040-hal = { version = "0.11", features = ["rt"] }
+rp2040-boot2 = "0.3.0"
 
 defmt-brtt = { version = "0.1.0", default-features = false }
 # We don't need bbqueue directly, but we need to activate the
