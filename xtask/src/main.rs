@@ -5,8 +5,8 @@ use std::{
 };
 
 use clap::Parser;
-use serialport::SerialPort;
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
+use xtask::UsbBridge;
 
 #[derive(Debug, clap::Parser)]
 pub enum Command {
@@ -66,16 +66,31 @@ pub enum Command {
     },
 }
 
+fn parse_hex(input: &str) -> Result<u16, std::num::ParseIntError> {
+    if let Some(hex_str) = input
+        .strip_prefix("0x")
+        .or_else(|| input.strip_prefix("0X"))
+    {
+        u16::from_str_radix(hex_str, 16)
+    } else {
+        input.parse::<u16>()
+    }
+}
+
 #[derive(Debug, clap::Parser)]
 pub struct Cli {
-    /// The name of the serial port to use for sending commands or
-    /// reading log data
-    #[cfg_attr(
-        target_os = "linux",
-        clap(short, long, default_value = "/dev/ttyACM0", global = true)
-    )]
-    #[clap(short, long, global = true, env = "XTASK_SERIAL")]
-    serial_port: String,
+    /// Rusty Probe's USB vendor ID
+    #[clap(global = true, long, short, default_value = "0x1209", value_parser = parse_hex)]
+    vendor: u16,
+
+    /// Rusty Probe's USB product ID
+    #[clap(global = true, long, short, default_value = "0x4853", value_parser = parse_hex)]
+    product: u16,
+
+    /// Rusty Probe's USB serial number.  Use this to choose a single probe if multiple are
+    /// connected.  If only one device is present, serial number is optional.
+    #[clap(global = true, long, short)]
+    serial: Option<String>,
 
     /// How long we should wait for the rp2040's USB filesystem
     /// to be mounted while flashing (in milliseconds).
@@ -86,22 +101,17 @@ pub struct Cli {
     command: Command,
 }
 
-fn reboot(serial_port: &mut Box<dyn SerialPort>) -> anyhow::Result<()> {
+fn reboot(usb: &mut UsbBridge) -> anyhow::Result<()> {
     eprintln!("Restarting probe into USB bootloader");
-    serial_port.write_all(&0xDABAD000u32.to_be_bytes())?;
+    usb.write_all(&0xDABAD000u32.to_be_bytes())?;
+    usb.flush_writes()?;
     Ok(())
 }
 
-fn read_log(
-    port: &mut Box<dyn SerialPort>,
-    defmt_print: Option<(String, bool)>,
-) -> anyhow::Result<()> {
+fn read_log(port: &mut UsbBridge, defmt_print: Option<(String, bool)>) -> anyhow::Result<()> {
     let buf = &mut [0u8; 2048];
 
-    fn read_data<'a>(
-        port: &mut Box<dyn SerialPort>,
-        buffer: &'a mut [u8],
-    ) -> anyhow::Result<&'a [u8]> {
+    fn read_data<'a>(port: &mut UsbBridge, buffer: &'a mut [u8]) -> anyhow::Result<&'a [u8]> {
         match port.read(buffer) {
             Ok(data) => Ok(&buffer[..data]),
             Err(e) => {
@@ -188,26 +198,24 @@ fn flash(elf: &str, timeout_ms: u64) -> anyhow::Result<()> {
 fn main() -> anyhow::Result<()> {
     let opts = Cli::parse();
 
-    let serial_port = || {
-        serialport::new(&opts.serial_port, 115200)
-            .timeout(std::time::Duration::from_millis(100))
-            .open()
-            .map_err(|e| anyhow::anyhow!(format!("Failed to open serial port: {e}")))
+    let usb = || {
+        UsbBridge::new(opts.vendor, opts.product, opts.serial.clone())
+            .map_err(|e| anyhow::anyhow!(format!("Failed to open USB endpoints: {e}")))
     };
 
     match opts.command {
-        Command::Reboot { succeed_if_absent } => match serial_port() {
-            Ok(mut serial_port) => reboot(&mut serial_port),
+        Command::Reboot { succeed_if_absent } => match usb() {
+            Ok(mut bridge) => reboot(&mut bridge),
             Err(e) if succeed_if_absent => {
-                eprintln!("Could not open Serial Port ({e}). Exiting with success");
+                eprintln!("Could not open USB endpoints ({e}). Exiting with success");
                 Ok(())
             }
             Err(e) => Err(e),
         },
         Command::Flash { elf } => flash(&elf, opts.timeout),
         Command::RebootAndFlash { elf } => {
-            if let Ok(mut port) = serial_port() {
-                reboot(&mut port)?;
+            if let Ok(mut bridge) = usb() {
+                reboot(&mut bridge)?;
             } else {
                 eprintln!(
                     "Could not find probe to restart... Assuming it is already in USB bootloader."
@@ -220,16 +228,16 @@ fn main() -> anyhow::Result<()> {
             defmt_elf_path,
             verbose,
         } => {
-            let mut serial_port = serial_port()?;
-            read_log(&mut serial_port, defmt_elf_path.map(|p| (p, verbose)))
+            let mut bridge = usb()?;
+            read_log(&mut bridge, defmt_elf_path.map(|p| (p, verbose)))
         }
         Command::Debug {
             elf,
             defmt_print,
             verbose,
         } => {
-            if let Ok(mut port) = serial_port() {
-                reboot(&mut port)?;
+            if let Ok(mut bridge) = usb() {
+                reboot(&mut bridge)?;
             } else {
                 eprintln!(
                     "Could not find probe to restart... Assuming it is already in USB bootloader."
@@ -246,13 +254,13 @@ fn main() -> anyhow::Result<()> {
                     return Err(anyhow::anyhow!("Acquiring log serial port timed out"));
                 }
 
-                if let Ok(mut port) = serial_port() {
+                if let Ok(mut bridge) = usb() {
                     // Sleep a little while so that some startup data can be accumulated
                     // in the serial port.
                     //
                     // Not entirely certain that this really helps, but ¯\_(ツ)_/¯
                     std::thread::sleep(Duration::from_millis(200));
-                    break read_log(&mut port, defmt_print.map(|p| (p, verbose)));
+                    break read_log(&mut bridge, defmt_print.map(|p| (p, verbose)));
                 }
             }
         }
