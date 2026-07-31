@@ -4,7 +4,8 @@ use dap_rs::usb_device::{
 };
 use defmt::*;
 use rp2040_hal::usb::UsbBus;
-use usbd_serial::SerialPort;
+use rtic_monotonics::fugit::{HertzU32, RateExtU32};
+use usbd_serial::CdcAcmClass;
 
 pub struct DebugInterface<'a, B: UsbBusTrait> {
     interface: InterfaceNumber,
@@ -110,6 +111,11 @@ impl<B: UsbBusTrait> UsbClass<B> for DebugInterface<'_, B> {
     }
 }
 
+pub struct CdcAcmTracking<'a, B: dap_rs::usb_device::bus::UsbBus> {
+    base: CdcAcmClass<'a, B>,
+    last_written_size: usize,
+}
+
 /// Implements the CMSIS DAP descriptors.
 pub struct ProbeUsb {
     device: UsbDevice<'static, UsbBus>,
@@ -117,7 +123,7 @@ pub struct ProbeUsb {
     winusb: MicrosoftDescriptors,
     dap_v1: CmsisDapV1<'static, UsbBus>,
     dap_v2: CmsisDapV2<'static, UsbBus>,
-    serial: SerialPort<'static, UsbBus>,
+    serial: CdcAcmTracking<'static, UsbBus>,
     debug: DebugInterface<'static, UsbBus>,
 }
 
@@ -134,7 +140,10 @@ impl ProbeUsb {
 
         let dap_v1 = CmsisDapV1::new(64, usb_bus);
         let dap_v2 = CmsisDapV2::new(64, usb_bus);
-        let serial = SerialPort::new(&usb_bus);
+        let serial = CdcAcmTracking {
+            base: CdcAcmClass::new(&usb_bus, /*max_packet_size=*/ 64),
+            last_written_size: 0,
+        };
         let debug = DebugInterface::new(
             &usb_bus,
             64,
@@ -187,12 +196,17 @@ impl ProbeUsb {
         }
     }
 
-    pub fn interrupt(&mut self) -> Option<Request> {
-        if self.device.poll(&mut [
+    pub fn interrupt<F: FnOnce(HertzU32), const N: usize>(
+        &mut self,
+        queues: &mut crate::setup::VCPQueues<'static, N>,
+        interrupt: rp2040_hal::pac::Interrupt,
+        update_baud: F,
+    ) -> Option<Request> {
+        let req = if self.device.poll(&mut [
             &mut self.winusb,
             &mut self.dap_v1,
             &mut self.dap_v2,
-            &mut self.serial,
+            &mut self.serial.base,
             &mut self.debug,
         ]) {
             let old_state = self.device_state;
@@ -203,34 +217,65 @@ impl ProbeUsb {
                 return Some(Request::Suspend);
             }
 
-            // Discard data from the serial interface
-            let mut buf = [0; 64 as usize];
-            let _read_data = self.serial.read(&mut buf);
+            update_baud(self.serial.base.line_coding().data_rate().Hz());
 
-            #[cfg(feature = "usb-serial-reboot")]
-            match self.debug.read(&mut buf) {
-                Ok(read_data) => {
-                    if &buf[..read_data] == &0xDABAD000u32.to_be_bytes() {
-                        rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
-                    }
+            self.dap_v1.process().or_else(|| self.dap_v2.process())
+        } else {
+            None
+        };
+
+        // Forward data from the serial interface
+        let mut buf = [0; 64 as usize];
+        if let Ok(mut grant) = queues.usb_to_uart_p.grant_exact(buf.len()) {
+            if let Ok(read_data) = self.serial.base.read_packet(&mut buf) {
+                grant.buf()[0..read_data].copy_from_slice(&buf[0..read_data]);
+                grant.commit(read_data);
+                // Kick the UART in case we disabled tx interrupts due to an empty queue
+                rtic::pend(interrupt);
+            } // else drop the grant, committing zero bytes
+        } // else exert backpressure on the USB side
+
+        if let Ok(grant) = queues.uart_to_usb_c.read() {
+            let buf = if grant.buf().len() > 64 {
+                &grant.buf()[0..64]
+            } else {
+                grant.buf()
+            };
+            match self.serial.base.write_packet(buf) {
+                Ok(written_data) => {
+                    grant.release(written_data);
+                    self.serial.last_written_size = written_data;
                 }
-                Err(UsbError::WouldBlock) => {}
+                Err(UsbError::WouldBlock) => {
+                    grant.release(0);
+                }
                 Err(e) => {
-                    error!("Debug Interface ep read: {}", defmt::Debug2Format(&e));
+                    error!("Serial interface ep write: {:?}", defmt::Debug2Format(&e));
+                    grant.release(0); // try again
                 }
             }
-
-            let r = self.dap_v1.process();
-            if r.is_some() {
-                return r;
-            }
-
-            let r = self.dap_v2.process();
-            if r.is_some() {
-                return r;
+        } else {
+            // Assume an InvalidSize error, i.e. no data for the consumer
+            if self.serial.last_written_size == self.serial.base.max_packet_size().into() {
+                let _ = self.serial.base.write_packet(&[]);
+                self.serial.last_written_size = 0;
             }
         }
-        None
+
+        #[cfg(feature = "usb-serial-reboot")]
+        match self.debug.read(&mut buf) {
+            Ok(read_data) => {
+                if &buf[..read_data] == &0xDABAD000u32.to_be_bytes() {
+                    rp2040_hal::rom_data::reset_to_usb_boot(0, 0);
+                }
+            }
+            Err(UsbError::WouldBlock) => {}
+            Err(e) => {
+                error!("Debug Interface ep read: {}", defmt::Debug2Format(&e));
+            }
+        }
+
+        req
     }
 
     /// Transmit a DAP report back over the DAPv1 HID interface

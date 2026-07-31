@@ -11,6 +11,7 @@ pub mod dap;
 pub mod device_signature;
 pub mod leds;
 pub mod pio;
+pub mod serial;
 pub mod setup;
 pub mod systick_delay;
 pub mod usb;
