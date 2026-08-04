@@ -1,7 +1,9 @@
 use crate::dap::{Context, Jtag, Swd, Swo, Wait};
 use crate::leds::{BoardLeds, HostStatusToken, LedManager};
+use crate::serial::VirtualComPort;
 use crate::systick_delay::Delay;
 use crate::{dap, usb::ProbeUsb};
+use bbqueue::{BBBuffer, Consumer, Producer};
 use core::mem::MaybeUninit;
 use dap_rs::usb_device::class_prelude::UsbBusAllocator;
 use embedded_hal::digital::{InputPin, OutputPin, StatefulOutputPin};
@@ -14,8 +16,8 @@ use rp2040_hal::gpio::bank0::{
     Gpio29, Gpio3, Gpio5, Gpio6, Gpio7, Gpio8, Gpio9,
 };
 use rp2040_hal::gpio::{
-    FunctionSio, FunctionSioInput, FunctionSioOutput, PinId, PinState, PullDown, PullNone,
-    PullType, PullUp, SioInput, SioOutput, ValidFunction,
+    FunctionSio, FunctionSioInput, FunctionSioOutput, FunctionUart, PinId, PinState, PullDown,
+    PullNone, PullType, PullUp, SioInput, SioOutput, ValidFunction,
 };
 use rp2040_hal::{
     clocks::init_clocks_and_plls,
@@ -47,12 +49,14 @@ pub type DirSwdioPin = Pin<Gpio12, FunctionSioOutput, PullNone>;
 pub type TdoSwoPin = DynPin<Gpio16, PullDown>;
 pub type TdiPin = DynPin<Gpio17, PullDown>;
 pub type DirSwclkPin = Pin<Gpio19, FunctionSioOutput, PullNone>;
-pub type VcpTxPin = DynPin<Gpio20, PullUp>;
-pub type VcpRxPin = DynPin<Gpio21, PullUp>;
+pub type VcpTxPin = Pin<Gpio20, FunctionUart, PullNone>;
+pub type VcpRxPin = Pin<Gpio21, FunctionUart, PullNone>;
 pub type VTargetAdcPin = AdcPin<Pin<Gpio26, FunctionSio<SioInput>, PullNone>>;
 pub type LedGreenPin = Pin<Gpio27, FunctionSio<SioOutput>, PullDown>;
 pub type LedRedPin = Pin<Gpio28, FunctionSio<SioOutput>, PullDown>;
 pub type LedBluePin = Pin<Gpio29, FunctionSio<SioOutput>, PullDown>;
+pub type VCPDevice = pac::UART1;
+pub type VCPPins = (VcpTxPin, VcpRxPin);
 
 /// The linker will place this boot block at the start of our program image. We
 /// need this to help the ROM bootloader get our code up and running.
@@ -60,12 +64,35 @@ pub type LedBluePin = Pin<Gpio29, FunctionSio<SioOutput>, PullDown>;
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
+pub struct VCPQueues<'a, const N: usize> {
+    pub usb_to_uart_p: Producer<'a, N>,
+    pub usb_to_uart_c: Consumer<'a, N>,
+    pub uart_to_usb_p: Producer<'a, N>,
+    pub uart_to_usb_c: Consumer<'a, N>,
+}
+
+impl<'a, const N: usize> VCPQueues<'a, N> {
+    pub fn new(usb_to_uart: &'a mut BBBuffer<N>, uart_to_usb: &'a mut BBBuffer<N>) -> Self {
+        let (p1, c1) = usb_to_uart.try_split().unwrap();
+        let (p2, c2) = uart_to_usb.try_split().unwrap();
+
+        Self {
+            usb_to_uart_p: p1,
+            usb_to_uart_c: c1,
+            uart_to_usb_p: p2,
+            uart_to_usb_c: c2,
+        }
+    }
+}
+
 #[inline(always)]
-pub fn setup(
+pub fn setup<'a, const N: usize>(
     pac: pac::Peripherals,
     core: cortex_m::Peripherals,
     usb_bus: &'static mut MaybeUninit<UsbBusAllocator<UsbBus>>,
     delay: &'static mut MaybeUninit<Delay>,
+    usb_to_uart: &'a mut BBBuffer<N>,
+    uart_to_usb: &'a mut BBBuffer<N>,
 ) -> (
     LedManager,
     ProbeUsb,
@@ -74,6 +101,8 @@ pub fn setup(
     TranslatorPower,
     TargetPower,
     TargetPhysicallyConnected,
+    VirtualComPort<VCPDevice, VCPPins>,
+    VCPQueues<'a, N>,
 ) {
     let mut resets = pac.RESETS;
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
@@ -185,10 +214,10 @@ pub fn setup(
     let _tdi = pins.gpio17;
     let _dir_tdi = pins.gpio23;
 
-    let _vcp_rx = pins.gpio21;
-    let _vcp_tx = pins.gpio20;
-    let _dir_vcp_rx = pins.gpio25;
-    let _dir_vcp_tx = pins.gpio24;
+    let _dir_vcp_rx = pins.gpio25.into_push_pull_output_in_state(false.into());
+    let _dir_vcp_tx = pins.gpio24.into_push_pull_output_in_state(true.into());
+    let vcp_rx = pins.gpio21.into_function().into_pull_type();
+    let vcp_tx = pins.gpio20.into_function().into_pull_type();
 
     // High speed IO
     io.set_drive_strength(OutputDriveStrength::TwelveMilliAmps);
@@ -208,6 +237,13 @@ pub fn setup(
     let host_status_token = led_manager.host_status_token();
     let target_physically_connected = TargetPhysicallyConnected { pin: gnd_detect };
 
+    let vcp = VirtualComPort::new(
+        pac.UART1,
+        (vcp_tx, vcp_rx),
+        &mut resets,
+        clocks.peripheral_clock.freq(),
+    );
+
     let dap_hander = dap::create_dap(
         git_version,
         DynPin::Input(io.into_pull_down_input()),
@@ -222,6 +258,8 @@ pub fn setup(
 
     Mono::start(pac.TIMER, &mut resets);
 
+    let queues = VCPQueues::new(usb_to_uart, uart_to_usb);
+
     (
         led_manager,
         probe_usb,
@@ -230,6 +268,8 @@ pub fn setup(
         translator_power,
         target_power,
         target_physically_connected,
+        vcp,
+        queues,
     )
 }
 

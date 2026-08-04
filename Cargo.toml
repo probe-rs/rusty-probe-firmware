@@ -31,16 +31,24 @@ rp2040-hal = { version = "0.10", features = ["rt"] }
 rp2040-boot2 = "0.2.1"
 
 defmt-brtt = { version = "0.1.0", default-features = false }
-# We don't need bbqueue directly, but we need to activate the
-# thumbv6 feature on it so it will compile.
-bbqueue = { version = "0.5", features = ["thumbv6"], optional = true }
+bbqueue = { version = "0.5", features = ["thumbv6"] }
 static_cell = "2.1.1"
+nb = "1.0"
+embedded-hal-async = "1.0.0"
+heapless = { version = "0.9.2", features = ["portable-atomic-unsafe-assume-single-core"] }
+smart-leds = "0.3.0"
+ws2812-pio = "0.8.0"
+void = { version = "1.0.2", default-features = false }
+fugit = { version = "0.3.7", features = ["defmt"] }
 
 [features]
-default = [ "defmt-brtt/rtt", "gnddetect" ]
-defmt-bbq = ["defmt-brtt/bbq", "dep:bbqueue"]
+default = [ "defmt-brtt/rtt", "gnddetect", "usb-serial-reboot" ]
+defmt-bbq = ["defmt-brtt/bbq"]
 gnddetect = []
 usb-serial-reboot = []
+
+[patch.crates-io]
+dap-rs = { git = "https://github.com/BryanKadzban/dap-rs.git", branch = "retrieve-deps" }
 
 # cargo build/run
 [profile.dev]
