@@ -1,24 +1,173 @@
 use rp2040_hal::{
     pac,
     uart::{
-        DataBits, Enabled, ReadErrorType, StopBits, UartConfig, UartDevice, UartPeripheral,
-        ValidUartPinout,
+        DataBits as UartDataBits, Enabled, Parity as UartParity, ReadErrorType,
+        StopBits as UartStopBits, UartConfig, UartDevice, UartPeripheral, ValidUartPinout,
     },
 };
 use rtic_monotonics::fugit::{HertzU32, RateExtU32};
+use usbd_serial::{LineCoding, ParityType, StopBits as UsbStopBits};
+
+#[derive(PartialEq, Clone, Copy, defmt::Format)]
+pub enum DataBits {
+    Five,
+    Six,
+    Seven,
+    Eight,
+}
+
+impl From<u8> for DataBits {
+    fn from(other: u8) -> Self {
+        match other {
+            5 => Self::Five,
+            6 => Self::Six,
+            7 => Self::Seven,
+            _ => Self::Eight,
+        }
+    }
+}
+
+impl Into<UartDataBits> for DataBits {
+    fn into(self) -> UartDataBits {
+        match self {
+            Self::Five => UartDataBits::Five,
+            Self::Six => UartDataBits::Six,
+            Self::Seven => UartDataBits::Seven,
+            Self::Eight => UartDataBits::Eight,
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Copy, defmt::Format)]
+pub enum Parity {
+    None,
+    Even,
+    Odd,
+    // The RP2040 serial port does not support Mark or Space parity, so we map them to None
+}
+
+impl From<ParityType> for Parity {
+    fn from(other: ParityType) -> Self {
+        match other {
+            ParityType::None => Self::None,
+            ParityType::Even => Self::Even,
+            ParityType::Odd => Self::Odd,
+            _ => Self::None,
+        }
+    }
+}
+
+impl Into<Option<UartParity>> for Parity {
+    fn into(self) -> Option<UartParity> {
+        match self {
+            Self::None => None,
+            Self::Even => Some(UartParity::Even),
+            Self::Odd => Some(UartParity::Odd),
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Copy, defmt::Format)]
+pub enum StopBits {
+    One,
+    Two,
+    // The RP2040 serial port does not support 1.5 stop bits, so we map that to two.
+}
+
+impl From<UsbStopBits> for StopBits {
+    fn from(other: UsbStopBits) -> Self {
+        match other {
+            UsbStopBits::One => Self::One,
+            UsbStopBits::OnePointFive => Self::Two,
+            UsbStopBits::Two => Self::Two,
+        }
+    }
+}
+
+impl Into<UartStopBits> for StopBits {
+    fn into(self) -> UartStopBits {
+        match self {
+            Self::One => UartStopBits::One,
+            Self::Two => UartStopBits::Two,
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Copy, defmt::Format)]
+pub struct SerialPortConfig {
+    pub baud: HertzU32,
+    pub data_bits: DataBits,
+    pub parity: Parity,
+    pub stop_bits: StopBits,
+}
+
+impl SerialPortConfig {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn baud(mut self, baud: HertzU32) -> Self {
+        self.baud = baud;
+        self
+    }
+    pub fn data_bits(mut self, data_bits: DataBits) -> Self {
+        self.data_bits = data_bits;
+        self
+    }
+    pub fn parity(mut self, parity: Parity) -> Self {
+        self.parity = parity;
+        self
+    }
+    pub fn stop_bits(mut self, stop_bits: StopBits) -> Self {
+        self.stop_bits = stop_bits;
+        self
+    }
+}
+
+impl Default for SerialPortConfig {
+    fn default() -> Self {
+        Self {
+            baud: 115_200_u32.Hz(),
+            data_bits: DataBits::Eight,
+            parity: Parity::None,
+            stop_bits: StopBits::One,
+        }
+    }
+}
+
+impl From<&LineCoding> for SerialPortConfig {
+    fn from(other: &LineCoding) -> Self {
+        Self {
+            baud: other.data_rate().Hz(),
+            data_bits: other.data_bits().into(),
+            parity: other.parity_type().into(),
+            stop_bits: other.stop_bits().into(),
+        }
+    }
+}
+
+impl Into<UartConfig> for SerialPortConfig {
+    fn into(self) -> UartConfig {
+        UartConfig::new(
+            self.baud,
+            self.data_bits.into(),
+            self.parity.into(),
+            self.stop_bits.into(),
+        )
+    }
+}
 
 pub struct VirtualComPort<D: UartDevice, P: ValidUartPinout<D>> {
     uart: Option<UartPeripheral<Enabled, D, P>>,
-    last_baud: HertzU32,
+    last_config: SerialPortConfig,
     peripheral_clock: HertzU32,
 }
 
 impl<D: UartDevice, P: ValidUartPinout<D>> VirtualComPort<D, P> {
     pub fn new(uart: D, pins: P, resets: &mut pac::RESETS, peripheral_clock: HertzU32) -> Self {
-        let initial_config =
-            UartConfig::new(115_200_u32.Hz(), DataBits::Eight, None, StopBits::One);
+        let initial_config = SerialPortConfig::default();
         let mut uart = UartPeripheral::new(uart, pins, resets)
-            .enable(initial_config, peripheral_clock)
+            .enable(initial_config.into(), peripheral_clock)
             .unwrap();
         uart.set_fifos(true);
         // We don't need to set the rx watermark, since the default of halfway full is fine.
@@ -26,30 +175,32 @@ impl<D: UartDevice, P: ValidUartPinout<D>> VirtualComPort<D, P> {
 
         Self {
             uart: Some(uart),
-            last_baud: 115_200_u32.Hz(),
+            last_config: initial_config,
             peripheral_clock: peripheral_clock,
         }
     }
 
-    pub fn update_speed(&mut self, baud: HertzU32, interrupt: rp2040_hal::pac::Interrupt) {
-        if self.last_baud == baud {
+    pub fn update_coding(&mut self, coding: &LineCoding, interrupt: rp2040_hal::pac::Interrupt) {
+        let config = coding.into();
+
+        if self.last_config == config {
             return;
         }
 
-        if baud > self.peripheral_clock / 16 || baud < self.peripheral_clock / (16 * 65535) {
+        if config.baud > self.peripheral_clock / 16
+            || config.baud < self.peripheral_clock / (16 * 65535)
+        {
             // ignore baud rates that we can't support
             return;
         }
 
-        self.last_baud = baud;
+        self.last_config = config;
 
         if let Some(uart) = self.uart.take() {
-            let new_config = UartConfig::new(baud, DataBits::Eight, None, StopBits::One);
-
             let mut new_uart = uart
                 .disable()
-                .enable(new_config, self.peripheral_clock)
-                .unwrap(); // unwrap: we only changed the baud rate, and validated it ourselves
+                .enable(config.into(), self.peripheral_clock)
+                .unwrap(); // unwrap: we validated the baud rate ourselves
             new_uart.set_fifos(true);
             new_uart.enable_rx_interrupt();
             self.uart = Some(new_uart);

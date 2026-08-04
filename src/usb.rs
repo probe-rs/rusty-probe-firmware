@@ -4,8 +4,7 @@ use dap_rs::usb_device::{
 };
 use defmt::*;
 use rp2040_hal::usb::UsbBus;
-use rtic_monotonics::fugit::{HertzU32, RateExtU32};
-use usbd_serial::CdcAcmClass;
+use usbd_serial::{CdcAcmClass, LineCoding};
 
 pub struct DebugInterface<'a, B: UsbBusTrait> {
     interface: InterfaceNumber,
@@ -196,7 +195,7 @@ impl ProbeUsb {
         }
     }
 
-    pub fn interrupt<F: FnOnce(HertzU32), const N: usize>(
+    pub fn interrupt<F: FnOnce(&LineCoding), const N: usize>(
         &mut self,
         queues: &mut crate::setup::VCPQueues<'static, N>,
         interrupt: rp2040_hal::pac::Interrupt,
@@ -217,7 +216,7 @@ impl ProbeUsb {
                 return Some(Request::Suspend);
             }
 
-            update_baud(self.serial.base.line_coding().data_rate().Hz());
+            update_baud(self.serial.base.line_coding());
 
             self.dap_v1.process().or_else(|| self.dap_v2.process())
         } else {

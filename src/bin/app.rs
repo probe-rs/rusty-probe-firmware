@@ -154,10 +154,10 @@ mod app {
             if let Some(request) = probe_usb.interrupt(
                 &mut ctx.shared.queues,
                 rp2040_hal::pac::Interrupt::UART1_IRQ,
-                |baud| {
+                |coding| {
                     ctx.shared
                         .vcp
-                        .update_speed(baud, rp2040_hal::pac::Interrupt::UART1_IRQ)
+                        .update_coding(coding, rp2040_hal::pac::Interrupt::UART1_IRQ)
                 },
             ) {
                 match dap_handler::spawn(request) {
