@@ -24,10 +24,10 @@ impl Delay {
     }
 
     pub fn delay_us(&self, mut us: u32) {
-        while us > 0x1fff {
-            let ticks = (us & 0x1fff) * self.ticks_per_us;
-            self.delay_ticks(ticks as u32);
-            us -= us & 0x1fff;
+        while us > 0 {
+            let chunk = us.min(0x1fff);
+            self.delay_ticks(chunk * self.ticks_per_us);
+            us -= chunk;
         }
     }
 

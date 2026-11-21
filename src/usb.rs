@@ -28,9 +28,11 @@ impl ProbeUsb {
     ) -> Self {
         let winusb = MicrosoftDescriptors;
 
+        // The allocation order sets the interface numbers. The serial port takes 0 and 1, so
+        // CMSIS-DAP v2 gets interface 3, which the dap-rs WinUSB descriptor expects.
+        let serial = SerialPort::new(&usb_bus);
         let dap_v1 = CmsisDapV1::new(64, usb_bus);
         let dap_v2 = CmsisDapV2::new(64, usb_bus);
-        let serial = SerialPort::new(&usb_bus);
 
         let id = crate::device_signature::device_id_hex();
         info!("Device ID: {}", id);
@@ -48,7 +50,8 @@ impl ProbeUsb {
         let device = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0x4853))
             .strings(&[descriptors_en, descriptors_en_us])
             .unwrap() // unwrap: Error is returned only if more than 16 languages are supplied.
-            .device_class(0)
+            // Windows needs the IAD to bind the serial port's two interfaces as one function.
+            .composite_with_iads()
             .max_packet_size_0(64)
             .unwrap() // unwrap: 64 is a valid packet size
             .max_power(500)
@@ -88,9 +91,9 @@ impl ProbeUsb {
     pub fn interrupt(&mut self) -> Option<Request> {
         if self.device.poll(&mut [
             &mut self.winusb,
+            &mut self.serial,
             &mut self.dap_v1,
             &mut self.dap_v2,
-            &mut self.serial,
         ]) {
             let old_state = self.device_state;
             let new_state = self.device.state();

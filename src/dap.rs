@@ -205,7 +205,7 @@ impl swj::Dependencies<Swd, Jtag> for Context {
 
     fn process_swj_clock(&mut self, max_frequency: u32) -> bool {
         trace!("Running SWJ clock");
-        if max_frequency < self.cpu_frequency {
+        if max_frequency > 0 && max_frequency < self.cpu_frequency {
             self.max_frequency = max_frequency;
             self.half_period_ticks = self.cpu_frequency / self.max_frequency / 2;
             trace!("  freq = {}", max_frequency);
@@ -371,6 +371,8 @@ impl swd::Swd<Context> for Swd {
         let mut last = self.0.delay.get_current();
 
         for b in data {
+            // `data` is part of the response buffer, which still holds the previous response.
+            *b = 0;
             let bit_count = core::cmp::min(num_bits, 8);
             for i in 0..bit_count {
                 let bit = self.read_bit(&mut last);

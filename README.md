@@ -17,6 +17,8 @@ DEFMT_LOG=off cargo build --release --bin app
 elf2uf2-rs target/thumbv6m-none-eabi/release/app app
 ```
 
+This needs elf2uf2-rs 2.2.0 or newer, older versions fail with `Unrecognized ABI`. Running the `cargo install` command again updates an older version.
+
 Start the RP2040 in bootloader mode and drop the `app.uf2` file to it, done! 
 
 ## Running with `defmt` logs without debugger
