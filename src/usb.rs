@@ -50,7 +50,8 @@ impl ProbeUsb {
         let device = UsbDeviceBuilder::new(usb_bus, UsbVidPid(0x1209, 0x4853))
             .strings(&[descriptors_en, descriptors_en_us])
             .unwrap() // unwrap: Error is returned only if more than 16 languages are supplied.
-            .device_class(0)
+            // Windows needs the IAD to bind the serial port's two interfaces as one function.
+            .composite_with_iads()
             .max_packet_size_0(64)
             .unwrap() // unwrap: 64 is a valid packet size
             .max_power(500)
