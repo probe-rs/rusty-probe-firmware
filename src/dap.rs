@@ -371,6 +371,8 @@ impl swd::Swd<Context> for Swd {
         let mut last = self.0.delay.get_current();
 
         for b in data {
+            // `data` is part of the response buffer, which still holds the previous response.
+            *b = 0;
             let bit_count = core::cmp::min(num_bits, 8);
             for i in 0..bit_count {
                 let bit = self.read_bit(&mut last);
